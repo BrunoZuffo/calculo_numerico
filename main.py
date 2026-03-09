@@ -1,15 +1,24 @@
+from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork
 import numpy as np
 
+# matriz de conectividade do exemplo
+conec = np.array([
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 2],
+    [5, 3],
+    [5, 1]
+])
 
-def CalculoCondutancia():
-    pi=np.pi
-    Ak=2.5*10**(-7)
-    mi=0.001
-    Dk=np.sqrt(4*Ak/pi)
-    kk=(pi*Dk**4)/(128*mi)
-    Lk=float(input("Digite o comprimento do cano:"))
-    Ck=kk/Lk #Lk é o comprimento do cano
 
-    print(f"A condutancia é: {Ck}")
-    return Ck
-CalculoCondutancia()
+C = np.array([2, 2, 1, 2, 1, 2, 2]) # valores de Ck do exemplo
+
+matriz = Assembly(conec, C)
+
+print(matriz)
+
+matriz = SolveNetwork(conec,C,3,1,3)
+
+print(matriz)
