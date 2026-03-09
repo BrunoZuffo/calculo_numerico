@@ -31,14 +31,11 @@ def SolveNetwork(conec: list[list], C:list, natm, nB, QB):
     Atilde[natm, :] = 0 #todas as colunas com linha natm recebem 0
     Atilde[natm, natm] = 1 
     
-    print(Atilde)
-
     b = np.zeros(Atilde.shape[0]) #shape retorna uma tupla com o numero de linhas e colunas, nesse caso o 0 pega o primeiro, o numero de linhas
     b[nB]=QB
-    print(b)
-    print(Atilde)
 
     pressure = np.linalg.solve(Atilde, b)
+
     return pressure
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
