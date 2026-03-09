@@ -1,4 +1,4 @@
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork
+from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, calc_vazao
 import numpy as np
 
 # matriz de conectividade do exemplo
@@ -19,6 +19,8 @@ matriz = Assembly(conec, C)
 
 print(matriz)
 
-matriz = SolveNetwork(conec,C,3,1,3)
+pressure = SolveNetwork(conec,C,3,1,3)
 
-print(matriz)
+print(pressure)
+
+matriz_vazao = calc_vazao(conec, C, pressure)
