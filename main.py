@@ -1,7 +1,7 @@
 import matplotlib
 matplotlib.use("TkAgg")
 
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, calc_vazao
+from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -38,6 +38,3 @@ print(pressure)
 
 matriz_vazao = calc_vazao(conec, C, pressure)
 print (matriz_vazao)
-
-fig, ax = PlotaRede(conec, Xno, pressure, matriz_vazao)
-plt.show()
