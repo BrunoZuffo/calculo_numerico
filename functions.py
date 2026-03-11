@@ -45,7 +45,7 @@ def SolveNetwork(conec: list[list], C:list, natm, nB, QB):
 
 def calc_vazao (conec, C, pressure):
 
-    nv = conec.max() + 1 #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
     nc = len(conec) #simplesmente o tanto de linhas na matriz conec
     # Q = KDp
 

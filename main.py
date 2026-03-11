@@ -24,3 +24,4 @@ pressure = SolveNetwork(conec,C,3,1,3)
 print(pressure)
 
 matriz_vazao = calc_vazao(conec, C, pressure)
+print (matriz_vazao)
