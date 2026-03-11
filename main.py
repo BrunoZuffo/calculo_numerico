@@ -12,4 +12,4 @@ def CalculoCondutancia():
 
     print(f"A condutancia é: {Ck}")
     return Ck
-CalculoCondutancia()
+
