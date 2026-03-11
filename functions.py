@@ -50,7 +50,7 @@ def CalculoCondutancia():
 
     print(f"A condutancia é: {Ck}")
     return Ck
-CalculoCondutancia()
+
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
 
