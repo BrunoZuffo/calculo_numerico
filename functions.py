@@ -21,10 +21,9 @@ def Assembly(conec: list[list], C: list):
 
     return A
 
-def SolveNetwork(conec: list[list], C:list, natm, nB, QB):
+def SolveNetwork(conec, C, natm, Qs):
 
     natm = natm - 1
-    nB = nB - 1
     
     Atilde = Assembly(conec,C) #recebe a matriz A
     
@@ -33,27 +32,31 @@ def SolveNetwork(conec: list[list], C:list, natm, nB, QB):
     
     print(Atilde)
 
-    b = np.zeros(Atilde.shape[0]) #shape retorna uma tupla com o numero de linhas e colunas, nesse caso o 0 pega o primeiro, o numero de linhas
-    b[nB]=QB
-    print(b)
-    print(Atilde)
+    n = Atilde.shape[0]
 
+    # vetor de termos independentes
+    b = np.zeros(n)
+
+    # adicionar vazões injetadas
+    for node, q in Qs.items():
+        b[node] = q
+
+    # resolver sistema linear
     pressure = np.linalg.solve(Atilde, b)
     return pressure
 
 #calculo condutancia - Victor Hugo
-def CalculoCondutancia():
+def CalculoCondutancia(Lk):
     pi=np.pi
     Ak=2.5*10**(-7)
     mi=0.001
     Dk=np.sqrt(4*Ak/pi)
     kk=(pi*Dk**4)/(128*mi)
-    Lk=float(input("Digite o comprimento do cano:"))
     Ck=kk/Lk #Lk é o comprimento do cano
 
     print(f"A condutancia é: {Ck}")
     return Ck
-CalculoCondutancia()
+
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
 
@@ -264,3 +267,4 @@ def GeraGrafo(levels=3):
         final_edges_list.append([id_start, id_end])
 
     return np.array(final_nodes_list), np.array(final_edges_list)
+
