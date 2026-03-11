@@ -19,6 +19,6 @@ matriz = Assembly(conec, C)
 
 print(matriz)
 
-matriz = SolveNetwork(conec,C,3,1,3)
+pressure = SolveNetwork(conec,C,3,1,3)
 
 print(matriz)
