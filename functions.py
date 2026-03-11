@@ -102,7 +102,6 @@ def CalculoCondutancia():
     Lk=float(input("Digite o comprimento do cano: "))
     Ck=kk/Lk #Lk é o comprimento do cano
 
-    print(f"A condutancia é: {Ck}")
     return Ck
 
 
