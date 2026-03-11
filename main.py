@@ -6,38 +6,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# matriz de conectividade do exemplo
-conec = np.array([
-    [1, 2],
-    [2, 3],
-    [3, 4],
-    [4, 5],
-    [5, 2],
-    [5, 3],
-    [5, 1]
-])
-
-
 C = np.array([2, 2, 1, 2, 1, 2, 2]) # valores de Ck do exemplo
 
-Xno = np.array([
-    [0, 0],   # nó 1
-    [1, 0],   # nó 2
-    [2, 0],   # nó 3
-    [3, 0],   # nó 4
-    [1.5, 1]  # nó 5
-])
 
-matriz = Assembly(conec, C)
+#gerar grafo
+Xno, conec = GeraGrafo(levels=3)
 
-print(matriz)
+#converter as unidades
+mm_to_m = 0.001
+Xno = Xno * mm_to_m
 
-pressure = SolveNetwork(conec,C,3,1,3)
+#criando condutancia para cada tubo
+C = np.ones(len(conec))
 
-print(pressure)
+#resolver sistema - gera grafo devolve conec na base 0, mas dentro da assembly e solvenetwork o temos conec-1
+pressure = SolveNetwork(conec + 1, C, 3, 1, 3)
 
-matriz_vazao = calc_vazao(conec, C, pressure)
-print (matriz_vazao)
+#calcular vazao
+q = calc_vazao(conec + 1, C, pressure)
 
-fig, ax = PlotaRede(conec, Xno, pressure, matriz_vazao)
+fig, ax = PlotaRede(conec, Xno, pressure, q, mm_to_m)
 plt.show()
