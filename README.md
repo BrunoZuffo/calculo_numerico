@@ -74,10 +74,18 @@ __pycache__/
 Nunca envie sua venv para o repositório.
 
 
----
+## Setup
 
-Se quiser, posso agora:
+Create virtual environment
 
-- Deixar isso mais profissional estilo projeto open-source  
-- Ou mais enxuto para projeto acadêmico  
-- Ou adicionar seção de execução do projeto (`python main.py`, etc.)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+
+Install python dependencies
+
+pip install -r requirements.txt
+
+Install system dependency (for matplotlib GUI)
+
+sudo apt install python3-tk
