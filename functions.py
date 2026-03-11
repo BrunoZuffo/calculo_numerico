@@ -38,6 +38,34 @@ def SolveNetwork(conec: list[list], C:list, natm, nB, QB):
 
     return pressure
 
+# Cálculo das vazões nos canos - Bosi 
+
+def calc_vazao (conec, C, pressure):
+
+    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+    # Q = KDp
+
+    # criar a matriz K
+    K = np.zeros((nc,nc))
+    for i in range (nc):
+      for j in range (nc):
+        if i == j:
+          K[i][j] = C[i]
+
+    # criar a matriz D
+    D = np.zeros((nc,nv))
+    for k in range (nc):
+      for j in range (nv):
+        if j == conec [k][0]-1:
+          D[k][j] = 1
+        elif j == conec [k][1]-1:
+          D[k][j] = -1
+
+    Q = K @ D @ pressure
+
+    return Q
+
 #calculo condutancia - Victor Hugo
 def CalculoCondutancia():
     pi=np.pi
@@ -50,6 +78,7 @@ def CalculoCondutancia():
 
     print(f"A condutancia é: {Ck}")
     return Ck
+
 
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
