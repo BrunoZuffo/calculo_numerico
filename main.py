@@ -38,3 +38,6 @@ print(pressure)
 
 matriz_vazao = calc_vazao(conec, C, pressure)
 print (matriz_vazao)
+
+fig, ax = PlotaRede(conec, Xno, pressure, matriz_vazao)
+plt.show()

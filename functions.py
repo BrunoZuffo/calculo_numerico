@@ -163,7 +163,7 @@ def PlotaRede(conec, Xno, p, q, factor_units=0.001):
 
         # --- Flux arrow (black) ---
         p1, p2 = p[edges[idx,0]], p[edges[idx,1]]
-        q_dir = 1 if p1 > p2 else -1
+        q_dir = 1 if q[idx] > 0 else -1
 
         ax.annotate(
               "",
