@@ -43,20 +43,18 @@ def SolveNetwork(conec: list[list], C:list, natm, nB, QB):
 
 # Cálculo das vazões nos canos - Bosi 
 
-def calc_vazao (conec, C, pressure):
-
-    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
-    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
-    # Q = KDp
-
+def createK (C, nc):
     # criar a matriz K
     K = np.zeros((nc,nc))
     for i in range (nc):
       for j in range (nc):
         if i == j:
           K[i][j] = C[i]
+        
+    return K
 
-    # criar a matriz D
+def createD (conec, nv,nc):
+   # criar a matriz D
     D = np.zeros((nc,nv))
     for k in range (nc):
       for j in range (nv):
@@ -65,9 +63,34 @@ def calc_vazao (conec, C, pressure):
         elif j == conec [k][1]-1:
           D[k][j] = -1
 
+    return D
+
+def calc_vazao (conec, C, pressure):
+
+    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+    # Q = KDp
+
+    K = createK (C, nc)
+    D = createD (conec, nv,nc)
+
     Q = K @ D @ pressure
 
     return Q
+
+# Cálculo da Potência - Bosi 
+
+def calc_potencia (conec, C, pressure):
+   
+    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+
+    K = createK (C, nc)
+    D = createD (conec, nv,nc)
+
+    W = pressure.T @ (D.T @ K @ D) @ pressure
+
+    return W
 
 #calculo condutancia - Victor Hugo
 def CalculoCondutancia():
@@ -76,7 +99,7 @@ def CalculoCondutancia():
     mi=0.001
     Dk=np.sqrt(4*Ak/pi)
     kk=(pi*Dk**4)/(128*mi)
-    Lk=float(input("Digite o comprimento do cano:"))
+    Lk=float(input("Digite o comprimento do cano: "))
     Ck=kk/Lk #Lk é o comprimento do cano
 
     print(f"A condutancia é: {Ck}")
