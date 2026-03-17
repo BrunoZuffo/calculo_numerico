@@ -1,10 +1,5 @@
-import matplotlib
-matplotlib.use("TkAgg")
-
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia
+from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork
 import numpy as np
-import matplotlib.pyplot as plt
-
 
 # matriz de conectividade do exemplo
 conec = np.array([
@@ -20,24 +15,10 @@ conec = np.array([
 
 C = np.array([2, 2, 1, 2, 1, 2, 2]) # valores de Ck do exemplo
 
-Xno = np.array([
-    [0, 0],   # nó 1
-    [1, 0],   # nó 2
-    [2, 0],   # nó 3
-    [3, 0],   # nó 4
-    [1.5, 1]  # nó 5
-])
-
 matriz = Assembly(conec, C)
 
 print(matriz)
 
-pressure = SolveNetwork(conec,C,3,1,3)
+matriz = SolveNetwork(conec,C,3,1,3)
 
-print(pressure)
-
-matriz_vazao = calc_vazao(conec, C, pressure)
-print (matriz_vazao)
-
-fig, ax = PlotaRede(conec, Xno, pressure, matriz_vazao)
-plt.show()
+print(matriz)
