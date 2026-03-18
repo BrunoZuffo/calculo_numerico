@@ -21,27 +21,31 @@ def Assembly(conec: list[list], C: list):
 
     return A
 
-def SolveNetwork(conec, C, natm, Qs):
+def SolveNetwork(conec: list[list], C:list, ps=None, Qs=None):
+    
+    A = Assembly(conec, C)
+    Atilde = A.copy() #recebe a matriz A
 
-    natm = natm - 1
-    
-    Atilde = Assembly(conec,C) #recebe a matriz A
-    
-    Atilde[natm, :] = 0 #todas as colunas com linha natm recebem 0
-    Atilde[natm, natm] = 1 
+    n = A.shape[0]
+    b = np.zeros(n)
+
+    if Qs is not None:
+        for node, value in Qs.items():
+            i = int(node) - 1
+            b[i] = value
+
+    if ps is not None:
+        for node, value in ps.items():
+            i = int(node) - 1
+
+            Atilde[i, :] = 0
+            Atilde[i, i] = 1
+            b[i] = value
+
+    print("b:", b)
     
     print(Atilde)
 
-    n = Atilde.shape[0]
-
-    # vetor de termos independentes
-    b = np.zeros(n)
-
-    # adicionar vazões injetadas
-    for node, q in Qs.items():
-        b[node] = q
-
-    # resolver sistema linear
     pressure = np.linalg.solve(Atilde, b)
     return pressure
 
