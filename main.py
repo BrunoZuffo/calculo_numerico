@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 #    [1.5, 1]  # nó 5
 #])
 
-Xno, conec = GeraGrafo(levels=2)
+Xno, conec = GeraGrafo(levels=3)
 
 mm_to_m = 0.001
 Xno = Xno * mm_to_m
