@@ -5,28 +5,28 @@ from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, cre
 import numpy as np
 import matplotlib.pyplot as plt
 
-# matriz de conectividade do exemplo
-conec = np.array([
-    [1, 2],
-    [2, 3],
-    [3, 4],
-    [4, 5],
-    [5, 2],
-    [5, 3],
-    [5, 1]
-])
-
-#coordenadas dos nós
-Xno = np.array([
-    [0, 0],   # nó 1
-    [1, 0],   # nó 2
-    [2, 0],   # nó 3
-    [3, 0],   # nó 4
-    [1.5, 1]  # nó 5
-])
-
-# valores de Ck do exemplo
-C = np.array([2, 2, 1, 2, 1, 2, 2]) 
+## matriz de conectividade do exemplo
+#conec = np.array([
+#    [1, 2],
+#    [2, 3],
+#    [3, 4],
+#    [4, 5],
+#    [5, 2],
+#    [5, 3],
+#    [5, 1]
+#])
+#
+##coordenadas dos nós
+#Xno = np.array([
+#    [0, 0],   # nó 1
+#    [1, 0],   # nó 2
+#    [2, 0],   # nó 3
+#    [3, 0],   # nó 4
+#    [1.5, 1]  # nó 5
+#])
+#
+## valores de Ck do exemplo
+#C = np.array([2, 2, 1, 2, 1, 2, 2]) 
 
 #teste para exercicio 2
 ps = {
