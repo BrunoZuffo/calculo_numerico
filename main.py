@@ -5,37 +5,16 @@ from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, cre
 import numpy as np
 import matplotlib.pyplot as plt
 
-## matriz de conectividade do exemplo
-#conec = np.array([
-#    [1, 2],
-#    [2, 3],
-#    [3, 4],
-#    [4, 5],
-#    [5, 2],
-#    [5, 3],
-#    [5, 1]
-#])
-#
-#C = np.array([2, 2, 1, 2, 1, 2, 2]) # valores de Ck do exemplo
-#
-#Xno = np.array([
-#    [0, 0],   # nó 1
-#    [1, 0],   # nó 2
-#    [2, 0],   # nó 3
-#    [3, 0],   # nó 4
-#    [1.5, 1]  # nó 5
-#])
-
-Xno, conec = GeraGrafo(levels=3)
+Xno, conec = GeraGrafo(levels=10)
 
 mm_to_m = 0.001
 Xno = Xno * mm_to_m
 
 C = AssemblyVectorC(conec, Xno)
 
-natm = len(Xno) - 1  #nó atmosférico (= 3 no exemplo numerico)
+natm = len(Xno) - 1  #nó atmosférico
 nbomba = 0  #nó conectado à bomba
-Qbomba = 1.0e-7  #vazao da bomba (= 3 no exemplo numerico)
+Qbomba = 1.0e-7  #vazao da bomba
 
 Qs = {nbomba: Qbomba} # dicionario
 
