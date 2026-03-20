@@ -84,7 +84,7 @@ for t in t_array:
 print(f"{'Nível':<7} | {'Qtd. Nós':<10} | {'T. Montagem (s)':<18} | {'T. Resolução (s)':<18}")
 print("-" * 62)
 
-for level in [1,2,3,4,5,6,7]:
+for level in [1,2,3,4]:
     Xno_test, conec_test = GeraGrafo(levels=level)
     Xno_test = Xno_test * mm_to_m
     n_nos = Xno_test.shape[0] #número de nós
@@ -142,18 +142,3 @@ plt.grid(True, linestyle='--', alpha=0.7)
 fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m)
 
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
