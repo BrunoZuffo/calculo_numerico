@@ -6,8 +6,10 @@ from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 
 def Assembly(conec: list[list], C: list):
-    conec = np.array(conec) - 1 # estamos convertendo conec em uma matriz numpy e fazendo decrementações em cada um dos indices para ficar mais pythonic
-    nv = conec.max() + 1 #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    #conec = np.array(conec) - 1 # estamos convertendo conec em uma matriz numpy e fazendo decrementações em cada um dos indices para ficar mais pythonic
+    conec = np.array(conec)
+    #nv = conec.max() + 1 #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    nv = int(conec.max() + 1)
     nc = len(conec) #simplesmente o tanto de linhas na matriz conec
     A = np.zeros(shape=(nv,nv)) #criando matriz com valores 0 em todas as posições
     for k in range(nc):
@@ -21,27 +23,31 @@ def Assembly(conec: list[list], C: list):
 
     return A
 
-def SolveNetwork(conec, C, natm, Qs):
+def SolveNetwork(conec: list[list], C:list, ps=None, Qs=None):
+    
+    A = Assembly(conec, C)
+    Atilde = A.copy() #recebe a matriz A
 
-    natm = natm - 1
-    
-    Atilde = Assembly(conec,C) #recebe a matriz A
-    
-    Atilde[natm, :] = 0 #todas as colunas com linha natm recebem 0
-    Atilde[natm, natm] = 1 
+    n = A.shape[0]
+    b = np.zeros(n)
+
+    if Qs is not None:
+        for node, value in Qs.items():
+            i = int(node) - 1
+            b[i] = value
+
+    if ps is not None:
+        for node, value in ps.items():
+            i = int(node) - 1
+
+            Atilde[i, :] = 0
+            Atilde[i, i] = 1
+            b[i] = value
+
+    print("b:", b)
     
     print(Atilde)
 
-    n = Atilde.shape[0]
-
-    # vetor de termos independentes
-    b = np.zeros(n)
-
-    # adicionar vazões injetadas
-    for node, q in Qs.items():
-        b[node] = q
-
-    # resolver sistema linear
     pressure = np.linalg.solve(Atilde, b)
     return pressure
 
@@ -62,17 +68,20 @@ def createD (conec, nv,nc):
     D = np.zeros((nc,nv))
     for k in range (nc):
       for j in range (nv):
-        if j == conec [k][0]-1:
+        #if j == conec [k][0]-1:
+        if j == conec [k][0]:
           D[k][j] = 1
-        elif j == conec [k][1]-1:
+        #elif j == conec [k][1]-1:
+        elif j == conec [k][1]:
           D[k][j] = -1
 
     return D
 
 def calc_vazao (conec, C, pressure):
 
-    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
-    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+    #nv = conec.max() #o valor maximo da matriz conec é igual ao numero de nos
+    nv = int(conec.max() + 1)
+    nc = len(conec) #o numero de linhas da matriz conec é igual ao numero de canos
     # Q = KDp
 
     K = createK (C, nc)
@@ -86,8 +95,9 @@ def calc_vazao (conec, C, pressure):
 
 def calc_potencia (conec, C, pressure):
    
-    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
-    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+    #nv = conec.max() #o valor maximo da matriz conec é igual ao numero de nos
+    nv = int(conec.max() + 1)
+    nc = len(conec) #o numero de linhas da matriz conec é igual ao numero de canos
 
     K = createK (C, nc)
     D = createD (conec, nv,nc)
@@ -107,10 +117,29 @@ def CalculoCondutancia(Lk):
 
     return Ck
 
+#função que calcula o comprimento do cano k (Lk) para montar o vetor de condutancias C- Matheus
+def AssemblyVectorC(conec, Xno):
+    nc = len(conec)
+    C = np.zeros(nc) #vetor de condutancias
+
+    for k in range (nc):
+        n1 = conec[k,0]
+        n2 = conec[k,1]
+
+        x1, y1 = Xno[n1,0], Xno[n1, 1]
+        x2, y2 = Xno[n2,0], Xno[n2, 1]
+
+        Lk = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+
+        C[k] = CalculoCondutancia(Lk)
+    
+    return C
+
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
 
-    edges = np.array(conec) - 1
+    #edges = np.array(conec) - 1
+    edges = np.array(conec)
     coord = Xno
     nv = np.max(edges) + 1
     nc = edges.shape[0]
