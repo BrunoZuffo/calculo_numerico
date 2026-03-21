@@ -44,9 +44,8 @@ def SolveNetwork(conec: list[list], C:list, ps=None, Qs=None):
             Atilde[i, i] = 1
             b[i] = value
 
-    print("b:", b)
-    
-    print(Atilde)
+    #print("b:", b)    
+    #print(Atilde)
 
     pressure = np.linalg.solve(Atilde, b)
     return pressure
@@ -266,8 +265,8 @@ def GeraGrafo(levels=3):
     nodes_data = []
     edges_raw = []
     node_id = 0
-    
-    spine_length = 6 
+
+    spine_length = 6
 
     # 1. Geração da Estrutura Base
     spine_nodes = []
@@ -276,12 +275,12 @@ def GeraGrafo(levels=3):
         spine_nodes.append(node_id)
         if i > 0: edges_raw.append((node_id - 1, node_id))
         node_id += 1
-        
+
     def add_fractal_branches(parent_id, px, py, angle, length, depth):
         nonlocal node_id
         if depth == 0: return
         angles = [angle + np.pi/6, angle - np.pi/6]
-        branch_len = length * 0.75 
+        branch_len = length * 0.75
         for a in angles:
             nx = px + branch_len * np.cos(a)
             ny = py + branch_len * np.sin(a)
@@ -298,7 +297,7 @@ def GeraGrafo(levels=3):
     # 2. Adição das Coletoras (Manifolds)
     df_temp = pd.DataFrame(nodes_data)
     y_max, y_min = df_temp['y'].max() + 1.0, df_temp['y'].min() - 1.0
-    
+
     all_indices = [e[0] for e in edges_raw] + [e[1] for e in edges_raw]
     counts = pd.Series(all_indices).value_counts()
     leaf_ids = counts[counts == 1].index.tolist()
@@ -312,9 +311,9 @@ def GeraGrafo(levels=3):
         node_id += 1
 
     # 3. Processamento Geométrico de Interseções
-    lines = [LineString([(nodes_data[e[0]]['x'], nodes_data[e[0]]['y']), 
+    lines = [LineString([(nodes_data[e[0]]['x'], nodes_data[e[0]]['y']),
                          (nodes_data[e[1]]['x'], nodes_data[e[1]]['y'])]) for e in edges_raw]
-    
+
     # Adicionar linhas das coletoras para o merge
     df_nodes_final = pd.DataFrame(nodes_data)
     for y_lim in [y_max, y_min]:
@@ -329,7 +328,7 @@ def GeraGrafo(levels=3):
     final_nodes_map = {}
     final_nodes_list = []
     final_edges_list = []
-    
+
     def get_node_id(pt):
         # Arredondamento para evitar erros de precisão de ponto flutuante
         coords = (round(pt[0], 6), round(pt[1], 6))
@@ -345,5 +344,11 @@ def GeraGrafo(levels=3):
         id_end = get_node_id(seg.coords[-1])
         final_edges_list.append([id_start, id_end])
 
-    return np.array(final_nodes_list), np.array(final_edges_list)
+    nodes_np = np.array(final_nodes_list)
+    edges_np = np.array(final_edges_list)
+    mask = edges_np[:, 0] != edges_np[:, 1]
+    edges_np = edges_np[mask]
+
+    return nodes_np, edges_np
+
 
