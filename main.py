@@ -156,8 +156,8 @@ for level in [1,2,3,4]:
     tempos_resolucao = []
 
     for _ in range(10):
-        #MONTAGEM:
 
+        #MONTAGEM:
         t_inicio_montagem = time.perf_counter()
 
         C_test = AssemblyVectorC(conec_test, Xno_test)
