@@ -64,7 +64,7 @@ alpha = pressao_alvo / pressao_no_inlet
 
 vazao_inlet_real = alpha * Q_teste
 
-print(f"Escalar alpha = {alpha:.2f}):")
+print(f"Escalar alpha = {alpha:.2f}:")
 print(f"Vazão necessária para manter 100 Pa no Inlet: {vazao_inlet_real:.4e} m³/s\n")
 
 # C: Itens 4 e 5
