@@ -68,7 +68,7 @@ alpha = pressao_alvo / pressao_no_inlet
 
 vazao_inlet_real = alpha * Q_teste
 
-print(f"Escalar alpha = {alpha:.2f}):")
+print(f"Escalar alpha = {alpha:.2f}:")
 print(f"Vazão necessária para manter 100 Pa no Inlet: {vazao_inlet_real:.4e} m³/s\n")
 
 # C: Itens 4 e 5
@@ -92,7 +92,7 @@ pressao_maxima_tempo_cos = []
 
 for t in t_array:
     fator_tempo_sin = 1.0 + 0.1 * np.sin(omega_sin * t)
-    fator_tempo_cos = 1.0 + 0.1 * np.cos(omega_cos * t)
+    fator_tempo_cos = 0.1 + 0.01 * np.cos(omega_cos * t)
     
     p_max_atual_sin = pressao_maxima_base_sin * fator_tempo_sin
     p_max_atual_cos = pressao_maxima_base_cos * fator_tempo_cos
