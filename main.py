@@ -88,7 +88,7 @@ pressao_maxima_tempo_cos = []
 
 for t in t_array:
     fator_tempo_sin = 1.0 + 0.1 * np.sin(omega_sin * t)
-    fator_tempo_cos = 1.0 + 0.1 * np.cos(omega_cos * t)
+    fator_tempo_cos = 0.1 + 0.01 * np.cos(omega_cos * t)
     
     p_max_atual_sin = pressao_maxima_base_sin * fator_tempo_sin
     p_max_atual_cos = pressao_maxima_base_cos * fator_tempo_cos
