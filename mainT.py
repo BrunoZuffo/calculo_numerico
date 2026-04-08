@@ -6,12 +6,16 @@ import matplotlib
 matplotlib.use("TkAgg")
 import time
 
+# INÍCIO ----------------------------------------------------------------------------------
+# não faz parte de nenhum exercício
+
 # Valores da placa para casos de teste:
 
 Nx = 50
 Ny = 20
 
 # Valores da placa assumidos, considerando o material sendo o polidimetilsiloxano puro (PDMS):
+# esses valores são fixos
 
 Lx = 0.02  # 2 cm
 Ly = 0.01  # 1 cm
@@ -23,12 +27,12 @@ K = 0.25 #valor intermediário do intervalo: 0.2 − 0.3 W ·K^−1 · m^−1
 TL = 10 # graus Celsius
 TR = 30 # graus Celsius
 
+fonte = 5.0e6  # valor do intervalo: 10^5 – 10^6 W ·m^−3
+
 x_coords = np.linspace(0, Lx, Nx)
 
 TB = 10 + 20 * (x_coords / Lx)
 TT = 10 + 20 * (x_coords / Lx)
-
-fonte = 1e6  # valor do intervalo: 10^5 – 10^6 W ·m^−3
 
 # Teste Função Assembly
 A = Assembly(Nx, Ny, K)
@@ -64,7 +68,7 @@ for (Nx, Ny) in casos:
     TT = 10 + 20 * (x_coords / Lx)
     
     # DENSO
-    if Nx <= 81: 
+    if Nx <= 161: # o computador não tem memória suficiente para resolver o caso 321 X 161 sem usar matriz esparsa
         T_d, tA_d, tM_d, tS_d = SolveSystem(Nx, Ny, h, K, TL, TR, TB, TT, fonte)
     else:
         T_d, tA_d, tM_d, tS_d = None, None, None, None
@@ -78,17 +82,17 @@ for (Nx, Ny) in casos:
         tA_s, tM_s, tS_s
     ])
     
-    # -------- CONTOUR --------
+    # CONTOUR
     PlotaPlaca(Nx, Ny, Lx, Ly, T_s)
     
-    # -------- PERFIL CENTRAL --------
+    # PERFIL CENTRAL (gráfio da temperatura em função do eixo X)
     linha_central = Ny // 2
     perfil = T_s[linha_central, :]
     
     x = np.linspace(0, Lx, Nx)
     
     plt.plot(x, perfil)
-    plt.title(f'Perfil central (Nx={Nx}, Ny={Ny})')
+    plt.title(f'Temperatura ao Longo do Eixo Central ({Nx} X {Ny})')
     plt.xlabel('x (m)')
     plt.ylabel('Temperatura (°C)')
     plt.grid()
@@ -100,8 +104,8 @@ print("="*90)
 
 header = (
     f"{'Nx':>5} {'Ny':>5} | "
-    f"{'Asm(D)':>10} {'Mont(D)':>10} {'Solve(D)':>10} | "
-    f"{'Asm(S)':>10} {'Mont(S)':>10} {'Solve(S)':>10}"
+    f"{'Mont.(D)':>10} {'Sist.(D)':>10} {'Resol.(D)':>10} | "
+    f"{'Mont.(S)':>10} {'Sist.(S)':>10} {'Resol.(S)':>10}"
 )
 
 print(header)
