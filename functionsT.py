@@ -4,30 +4,210 @@ from matplotlib import cm
 import pandas as pd
 from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
+import time
 
-def ij2n (i, j, N):
-    return i + j*N
+def ij2n (i, j, Nx):
+    return i + j*Nx
 
+# FUNÇÃO ASSEMBLY --------------------------------------------------------------------------
+import numpy as np
 
-def Assembly(N, k):
-    nunk = N * N # Número total de pontos/incógnitas 
-    A = np.zeros(shape=(nunk, nunk)) # Cria a matriz inicial cheia de zeros 
+def Assembly(Nx, Ny, k):
     
-    # Varre apenas os nós internos da malha 
-    for i in range(1, N-1):
-        for j in range(1, N-1):
+    nunk = Nx * Ny
+    A = np.zeros((nunk, nunk))
+    
+    # Percorre todos os pontos
+    for i in range(Nx):
+        for j in range(Ny):
             
-            # 1. Calcula o índice global do ponto central (Ic) 
-            Ic = ij2n(i, j, N)
+            Ic = ij2n(i, j, Nx)
             
-            # 2. Calcula os índices globais dos 4 vizinhos 
-            Ie = ij2n(i+1, j, N) # Vizinho Leste (East)
-            Iw = ij2n(i-1, j, N) # Vizinho Oeste (West)
-            In = ij2n(i, j+1, N) # Vizinho Norte (North)
-            Is = ij2n(i, j-1, N) # Vizinho Sul (South)
+            # 🔹 Condição de contorno
+            if i == 0 or i == Nx-1 or j == 0 or j == Ny-1:
+                A[Ic, Ic] = 1
             
-            # 3. Preenche a matriz A na linha correspondente ao ponto central (Ic) 
-            # O ponto central recebe 4*k, e os vizinhos recebem -k 
-            A[Ic, [Ic, Ie, Iw, In, Is]] = [4*k, -k, -k, -k, -k]
+            else:
+                # vizinhos
+                Ie = ij2n(i+1, j, Nx)
+                Iw = ij2n(i-1, j, Nx)
+                In = ij2n(i, j+1, Nx)
+                Is = ij2n(i, j-1, Nx)
+                
+                A[Ic, Ic] = 4*k
+                A[Ic, Ie] = -k
+                A[Ic, Iw] = -k
+                A[Ic, In] = -k
+                A[Ic, Is] = -k
+
+    return A
+
+# FUNÇÃO SolveSystem --------------------------------------------------------------------------
+import numpy as np
+
+def SolveSystem(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
+    
+    # Tempo do Assembly
+    t0 = time.time()
+    A = Assembly(Nx, Ny, k)
+    t_assembly = time.time() - t0
+
+    # Tempo de montagem do sistema
+    t0 = time.time()
+
+    Atilde = A.copy()
+    nunk = Nx * Ny
+    b = np.zeros(nunk)
+    
+    if fonte is not None:
+        b += fonte * h**2
+    
+    # 3. Matriz identidade (para impor contorno)
+    Iden = np.identity(nunk)
+    
+    # 4. Aplicar condições de contorno
+    for i in range(Nx):
+        for j in range(Ny):
             
-    return A 
+            Ic = ij2n(i, j, Nx)
+            
+            # esquerda
+            if i == 0:
+                Atilde[Ic, :] = Iden[Ic, :]
+                b[Ic] = TL
+            
+            # direita
+            elif i == Nx-1:
+                Atilde[Ic, :] = Iden[Ic, :]
+                b[Ic] = TR
+            
+            # base
+            elif j == 0:
+                Atilde[Ic, :] = Iden[Ic, :]
+                b[Ic] = TB[i]
+            
+            # topo
+            elif j == Ny-1:
+                Atilde[Ic, :] = Iden[Ic, :]
+                b[Ic] = TT[i]
+
+    t_montagem = time.time() - t0
+    
+    # tempo reolução do sistema linear
+    t0 = time.time()
+    T = np.linalg.solve(Atilde, b)
+    t_sistema = time.time() - t0
+    
+    T_grid = T.reshape((Ny, Nx))
+
+    return T_grid, t_assembly, t_montagem, t_sistema
+
+# FUNÇÃO SolveSystemSparse --------------------------------------------------------------------------
+def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
+
+
+    nunk = Nx * Ny
+    
+    #tempo para a montagem da matriz
+    t0 = time.time()
+    # 1. Diagonais
+    d0 = np.ones(nunk) * 4.0 * k          # diagonal principal
+    d1 = -np.ones(nunk - 1) * k           # vizinhos esquerda/direita
+    dN = -np.ones(nunk - Nx) * k          # vizinhos cima/baixo
+    
+    for i in range(1, Ny):
+        d1[i * Nx - 1] = 0  # quebra conexão entre linhas
+    
+    # 2. Montar matriz esparsa
+    A = sparse.diags(
+        [dN, d1, d0, d1, dN],
+        [-Nx, -1, 0, 1, Nx],
+        format='lil'  # fácil de modificar
+    )
+
+    t_assembly = time.time() - t0
+    
+    # tempo para a montagem do sistema:
+    t0 = time.time()
+
+    # 3. Vetor do lado direito
+    b = np.zeros(nunk)
+    
+    if fonte is not None:
+        b += fonte * h**2
+    
+    # 4. Aplicar condições de contorno
+    for i in range(Nx):
+        for j in range(Ny):
+            
+            Ic = ij2n(i, j, Nx)
+            
+            if i == 0:  # esquerda
+                A[Ic, :] = 0
+                A[Ic, Ic] = 1
+                b[Ic] = TL
+                
+            elif i == Nx-1:  # direita
+                A[Ic, :] = 0
+                A[Ic, Ic] = 1
+                b[Ic] = TR
+                
+            elif j == 0:  # base
+                A[Ic, :] = 0
+                A[Ic, Ic] = 1
+                b[Ic] = TB[i]
+                
+            elif j == Ny-1:  # topo
+                A[Ic, :] = 0
+                A[Ic, Ic] = 1
+                b[Ic] = TT[i]
+    
+    # 5. Converter para CSR (eficiente)
+    A = A.tocsr()
+
+    t_montagem = time.time() - t0
+
+    # tempo reolução do sistema linear
+    t0 = time.time()
+    
+    # 6. Resolver sistema
+    T = spsolve(A, b)
+
+    t_sistema = time.time() - t0
+    
+    # 7. Converter para matriz 2D
+    T_grid = T.reshape((Ny, Nx))
+    
+    return T_grid, t_assembly, t_montagem, t_sistema
+
+# FUNÇÃO PlotaPlaca --------------------------------------------------------------------------
+
+def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
+    x = np.linspace(0.0, Lx, Nx)
+    y = np.linspace(0.0, Ly, Ny)
+    X, Y = np.meshgrid(x, y)
+    Z = np.copy(T).reshape(Ny, Nx)
+    if(flag_type == 'contour'):
+      fig, ax = plt.subplots(figsize=(6,6))
+      ax.set_aspect('equal')
+      ax.set(xlabel='x', ylabel='y', title='Contours of temperature')
+      im = ax.contourf(X, Y, Z, 20, cmap='jet')
+      im2 = ax.contour(X, Y, Z, 20, linewidths=0.25, colors='k')
+      fig.colorbar(im, ax=ax, orientation='horizontal')
+    elif(flag_type == 'surface'):
+      fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+      ax.set_aspect('equal')
+      surf = ax.plot_surface(X, Y, Z, cmap='jet')
+      fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5) 
+    
+    plt.xticks([0, Lx/2, Lx])
+    plt.yticks([0, Ly/2, Ly])
+
+    if(filename is not None):
+      plt.savefig(filename)
+
+    plt.show()
+
+    return
