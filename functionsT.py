@@ -211,3 +211,121 @@ def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
     plt.show()
 
     return
+
+# FUNÇÃO Jacobi --------------------------------------------------------------------------
+
+def Jacobi(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT):
+    
+    nunk = Nx * Ny
+    
+    A = Assembly(Nx, Ny, k)
+    b = np.zeros(nunk)
+    
+    if fonte is not None:
+        b += fonte * h**2
+    
+    # aplicar contorno
+    for i in range(Nx):
+        for j in range(Ny):
+            Ic = ij2n(i, j, Nx)
+            
+            if i == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TL
+            elif i == Nx-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TR
+            elif j == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TB[i]
+            elif j == Ny-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TT[i]
+    
+    x = np.zeros(nunk)
+    F = A @ x - b
+    
+    M = np.diag(np.diag(A))
+    
+    k_iter = 0
+    t0 = time.time()
+    
+    while np.linalg.norm(F, np.inf) > TOL and k_iter < MAXIT:
+        
+        d = np.linalg.solve(M, -F)
+        
+        beta = 1.0
+        x = x + beta * d
+        
+        F = A @ x - b
+        
+        k_iter += 1
+    
+    tempo = time.time() - t0
+    
+    T_grid = x.reshape((Ny, Nx))
+    
+    return T_grid, k_iter, tempo
+
+# FUNÇÃO Gauss-Seidel --------------------------------------------------------------------------
+
+def GaussSeidel(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT):
+    
+    nunk = Nx * Ny
+    
+    A = Assembly(Nx, Ny, k)
+    b = np.zeros(nunk)
+    
+    if fonte is not None:
+        b += fonte * h**2
+    
+    # contorno
+    for i in range(Nx):
+        for j in range(Ny):
+            Ic = ij2n(i, j, Nx)
+            
+            if i == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TL
+            elif i == Nx-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TR
+            elif j == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TB[i]
+            elif j == Ny-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TT[i]
+    
+    x = np.zeros(nunk)
+    F = A @ x - b
+    
+    M = np.tril(A)
+    
+    k_iter = 0
+    t0 = time.time()
+    
+    while np.linalg.norm(F, np.inf) > TOL and k_iter < MAXIT:
+        
+        d = np.linalg.solve(M, -F)
+        
+        beta = 1.0
+        x = x + beta * d
+        
+        F = A @ x - b
+        
+        k_iter += 1
+    
+    tempo = time.time() - t0
+    
+    T_grid = x.reshape((Ny, Nx))
+    
+    return T_grid, k_iter, tempo
