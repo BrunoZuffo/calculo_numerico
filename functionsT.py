@@ -213,7 +213,7 @@ def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
 
     return
 
-#FUNÇÃO SolveSystemSparse_Circle
+#FUNÇÃO SolveSystemSparse_Circle ---------------------------------------------------------------------------------------
 def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc, yc, TC):
  
     nunk = Nx * Ny
@@ -247,7 +247,7 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
  
     t_assembly = time.time() - t0
  
-    # Tempo de montagem do sistema (BC + RHS + região circular)
+    # Tempo de montagem do sistema 
     t0 = time.time()
  
     b = np.zeros(nunk)
