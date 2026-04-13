@@ -229,7 +229,7 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
             if dist <= R:
                 circle_mask[j, i] = True
  
-    # Tempo de Assembly (diagonais da matriz esparsa)
+    # Tempo de Assembly 
     t0 = time.time()
  
     d0 = np.ones(nunk)     *  4.0 * k
@@ -237,7 +237,7 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
     dN = np.ones(nunk - Nx) * -k
  
     for i in range(1, Ny):
-        d1[i * Nx - 1] = 0  # quebra conexão entre linhas
+        d1[i * Nx - 1] = 0  
  
     A = sparse.diags(
         [dN, d1, d0, d1, dN],
