@@ -182,6 +182,7 @@ def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
     
     return T_grid, t_assembly, t_montagem, t_sistema
 
+
 # FUNÇÃO PlotaPlaca --------------------------------------------------------------------------
 
 def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
@@ -211,3 +212,82 @@ def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
     plt.show()
 
     return
+
+#FUNÇÃO SolveSystemSparse_Circle
+def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc, yc, TC):
+ 
+    nunk = Nx * Ny
+ 
+    # Coordenadas dos pontos da malha
+    x_coords = np.linspace(0, Lx, Nx)
+    y_coords = np.linspace(0, Ly, Ny)
+ 
+    circle_mask = np.zeros((Ny, Nx), dtype=bool)
+    for j in range(Ny):
+        for i in range(Nx):
+            dist = np.sqrt((x_coords[i] - xc)**2 + (y_coords[j] - yc)**2)
+            if dist <= R:
+                circle_mask[j, i] = True
+ 
+    # Tempo de Assembly (diagonais da matriz esparsa)
+    t0 = time.time()
+ 
+    d0 = np.ones(nunk)     *  4.0 * k
+    d1 = np.ones(nunk - 1) * -k
+    dN = np.ones(nunk - Nx) * -k
+ 
+    for i in range(1, Ny):
+        d1[i * Nx - 1] = 0  # quebra conexão entre linhas
+ 
+    A = sparse.diags(
+        [dN, d1, d0, d1, dN],
+        [-Nx, -1, 0, 1, Nx],
+        format='lil'
+    )
+ 
+    t_assembly = time.time() - t0
+ 
+    # Tempo de montagem do sistema (BC + RHS + região circular)
+    t0 = time.time()
+ 
+    b = np.zeros(nunk)
+
+
+    for j in range(Ny):
+        for i in range(Nx):
+            Ic = ij2n(i, j, Nx)
+            is_border = (i == 0 or i == Nx - 1 or j == 0 or j == Ny - 1)
+            if fonte is not None and not is_border and not circle_mask[j, i]:
+                b[Ic] = fonte * h ** 2
+
+    for i in range(Nx):
+        for j in range(Ny):
+ 
+            Ic = ij2n(i, j, Nx)
+ 
+            if i == 0:           # borda esquerda
+                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TL
+ 
+            elif i == Nx - 1:    # borda direita
+                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TR
+ 
+            elif j == 0:         # borda inferior
+                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TB[i]
+ 
+            elif j == Ny - 1:    # borda superior
+                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TT[i]
+ 
+            elif circle_mask[j, i]:   # região circular interna
+                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TC
+ 
+    A = A.tocsr()
+    t_montagem = time.time() - t0
+ 
+    # Tempo de resolução
+    t0 = time.time()
+    T  = spsolve(A, b)
+    t_sistema = time.time() - t0
+ 
+    T_grid = T.reshape((Ny, Nx))
+ 
+    return T_grid, t_assembly, t_montagem, t_sistema, circle_mask
