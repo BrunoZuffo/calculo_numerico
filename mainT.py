@@ -27,7 +27,7 @@ K = 0.25 #valor intermediário do intervalo: 0.2 − 0.3 W ·K^−1 · m^−1
 TL = 10 # graus Celsius
 TR = 30 # graus Celsius
 
-fonte = 5.0e5  # valor do intervalo: 10^5 – 10^6 W ·m^−3 (tive que colocar menor valor - NAT)
+fonte = 5.8e5  # valor do intervalo: 10^5 – 10^6 W ·m^−3 (tive que colocar menor valor - NAT)
 
 x_coords = np.linspace(0, Lx, Nx)
 
