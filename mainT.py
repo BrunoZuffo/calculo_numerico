@@ -1,4 +1,4 @@
-from functionsT import ij2n, Assembly, SolveSystem, SolveSystemSparse, PlotaPlaca, Jacobi, GaussSeidel
+from functionsT import ij2n, Assembly, SolveSystem, SolveSystemSparse, PlotaPlaca, SolveSystemSparse_Circle
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -27,7 +27,7 @@ K = 0.25 #valor intermediário do intervalo: 0.2 − 0.3 W ·K^−1 · m^−1
 TL = 10 # graus Celsius
 TR = 30 # graus Celsius
 
-fonte = 5.0e5  # valor do intervalo: 10^5 – 10^6 W ·m^−3 - NÃO ALTERAR
+fonte = 5.0e5  # valor do intervalo: 10^5 – 10^6 W ·m^−3 (tive que colocar menor valor - NAT)
 
 x_coords = np.linspace(0, Lx, Nx)
 
@@ -124,28 +124,86 @@ for r in resultados:
 
 print("="*90)
 
-# Exercício 1, parte 2 -------------------------------------------------------------------------------
+#Exercício 2 ----------------------------------------------------------------------------------------------
 
-casos = [(21,11), (41,21), (81,41), (161,81), (321,161)]
-TOLs = [1e-2, 1e-4, 1e-6]
-MAXITER = 10000
+# Parâmetros da região circular
+R  = 0.002          
+xc = 0.75 * Lx     
+yc = 0.50 * Ly     
+TC = 30.0           
 
-print("\n" + "="*90)
-print(f"{'COMPARAÇÃO DE MÉTODOS (JACOBI vs GAUSS-SEIDEL)':^90}")
-print("="*90)
-
-print(f"{'Nx':>5} {'Ny':>5} {'TOL':>8} | {'Jacobi(s)':>10} {'Iter':>6} | {'GS(s)':>10} {'Iter':>6}")
-
-for (Nx, Ny) in casos:
-    
+casos_ex2      = [(21, 11), (41, 21), (81, 41), (161, 81), (321, 161)]
+resultados_ex2 = []
+ 
+for (Nx, Ny) in casos_ex2:
+ 
+    h        = Lx / (Nx - 1)
     x_coords = np.linspace(0, Lx, Nx)
-    TB = 10 + 20 * (x_coords / Lx)
-    TT = 10 + 20 * (x_coords / Lx)
-    h = Lx / (Nx - 1)
+    TB       = 10 + 20 * (x_coords / Lx)
+    TT       = 10 + 20 * (x_coords / Lx)
+ 
+    T_s, tA_s, tM_s, tS_s, circle_mask = SolveSystemSparse_Circle(
+        Nx, Ny, h, K, TL, TR, TB, TT, fonte,
+        Lx, Ly, R, xc, yc, TC
+    )
+ 
+    T_max = T_s.max()
+    resultados_ex2.append([Nx, Ny, tA_s, tM_s, tS_s, T_max])
+ 
+    # Curvas de nível 
+    x = np.linspace(0, Lx, Nx)
+    y = np.linspace(0, Ly, Ny)
+    X, Y = np.meshgrid(x, y)
+ 
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.set_aspect('equal')
+    levels = np.linspace(10, 42, 17)
+    im  = ax.contourf(X, Y, T_s, levels=levels, cmap='jet')
+    ax.contour(X, Y, T_s, levels=levels, linewidths=0.25, colors='k')
+    cbar = fig.colorbar(im, ax=ax, orientation='horizontal', pad=0.22)
+    cbar.set_ticks(np.arange(10, 46, 4))
+    ax.set(xlabel='x', ylabel='y', title=f'Contours of temperature  ({Nx}×{Ny})')
+    ax.set_xticks([0, 0.01, 0.02])
+    ax.set_yticks([0.000, 0.005, 0.010])
+    plt.tight_layout()
+    plt.show()
+
     
-    for tol in TOLs:
-        
-        Tj, it_j, tj = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER)
-        Tg, it_g, tg = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER)
-        
-        print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
+    # Perfil de temperatura ao longo do eixo central
+    linha_central = Ny // 2
+    perfil        = T_s[linha_central, :]
+ 
+    plt.figure(figsize=(7, 3.5))
+    plt.plot(x * 100, perfil, color='crimson', lw=1.8)
+    plt.axvline(xc * 100, color='steelblue', ls='--', lw=1.2,
+                label=f'Centro do círculo  (x = {xc*100:.1f} cm)')
+    plt.title(f'Perfil de temperatura – eixo central  ({Nx}×{Ny})')
+    plt.xlabel('x (cm)')
+    plt.ylabel('Temperatura (°C)')
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+ 
+# Tabela de resultados 
+print("\n" + "=" * 75)
+print(f"{'RESULTADOS DO EX2  (Região Circular  TC = 30°C)':^75}")
+print("=" * 75)
+ 
+header2 = (
+    f"{'Nx':>5} {'Ny':>5} | "
+    f"{'Mont. (S)':>10} {'Sist.(S)':>10} {'Resol. (sS)':>10} | "
+    f"{'T_max (°C)':>10}"
+)
+print(header2)
+print("-" * 55)
+ 
+for r in resultados_ex2:
+    print(
+        f"{r[0]:5d} {r[1]:5d} | "
+        f"{r[2]:10.4f} {r[3]:10.4f} {r[4]:10.4f} | "
+        f"{r[5]:10.3f}"
+    )
+ 
+print("=" * 55)
+ 
