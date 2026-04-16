@@ -55,7 +55,7 @@ T, t_assembly, t_montagem, t_sistema= SolveSystemSparse(Nx, Ny, h, K, TL, TR, TB
 # Teste da Função PlotaPlaca
 PlotaPlaca(Nx=Nx, Ny=Ny, Lx=Lx, Ly=Ly, T=T, flag_type='contour')
 
-# Exercício 1 -------------------------------------------------------------------------------
+# 2.5.1 Exercício 1 -------------------------------------------------------------------------------
 
 casos = [(21,11), (41,21), (81,41), (161,81), (321,161)]
 resultados = []
@@ -124,7 +124,7 @@ for r in resultados:
 
 print("="*90)
 
-# Exercício 2 ----------------------------------------------------------------------------------------------
+# 2.5.1 Exercício 2 ----------------------------------------------------------------------------------------------
 
 # Parâmetros da região circular
 R  = 0.002          
@@ -207,7 +207,62 @@ for r in resultados_ex2:
  
 print("=" * 90)
 
-# Exercício 5 ----------------------------------------------------------------------------------------------
+# 2.5.1 Exercício 4 ----------------------------------------------------------------------------------------------
+
+# Definindo os parâmetros da malha fixa 
+Nx_param, Ny_param = 101, 51
+h_param = Lx / (Nx_param - 1)
+
+x_coords_param = np.linspace(0, Lx, Nx_param)
+TB_param = 10 + 20 * (x_coords_param / Lx)
+TT_param = 10 + 20 * (x_coords_param / Lx)
+
+# Vetores de Temperatura do Círculo (TC) para testar
+valores_TC = np.linspace(0, 100, 21) 
+
+T_max_list = []
+T_med_list = []
+
+# Loop para rodar a simulação para cada valor de TC
+for TC_atual in valores_TC:
+    
+    T_vec, _, _, _, _ = SolveSystemSparse_Circle(
+        Nx_param, Ny_param, h_param, K, TL, TR, TB_param, TT_param, fonte, Lx, Ly, R, xc, yc, TC_atual
+    )
+    
+    # O SciPy retorna o vetor 1D. Achamos o máximo e a média com o NumPy
+    T_max_list.append(np.max(T_vec))
+    T_med_list.append(np.mean(T_vec))
+
+# Geração dos Gráficos
+plt.figure(figsize=(8, 5))
+
+# Eixo Y esquerdo (Temperatura Máxima)
+ax1 = plt.gca()
+linha1, = ax1.plot(valores_TC, T_max_list, color='crimson', marker='o', label='Temp. Máxima')
+ax1.set_xlabel('Temperatura do Círculo TC (°C)')
+ax1.set_ylabel('Temperatura Máxima da Placa (°C)', color='crimson')
+ax1.tick_params(axis='y', labelcolor='crimson')
+
+# Eixo Y direito (Temperatura Média)
+ax2 = ax1.twinx() 
+linha2, = ax2.plot(valores_TC, T_med_list, color='steelblue', marker='s', label='Temp. Média')
+ax2.set_ylabel('Temperatura Média da Placa (°C)', color='steelblue')
+ax2.tick_params(axis='y', labelcolor='steelblue')
+
+# Título e Legendas
+plt.title('Estudo Paramétrico: Efeito de TC na Placa (Malha 101x51)')
+ax1.grid(True, linestyle='--', alpha=0.6)
+
+# Juntar as legendas dos dois eixos
+linhas = [linha1, linha2]
+labels = [l.get_label() for l in linhas]
+ax1.legend(linhas, labels, loc='upper left')
+
+plt.tight_layout()
+plt.show()
+
+# 2.5.1 Exercício 5 ----------------------------------------------------------------------------------------------
 
 print("\n" + "=" * 90)
 print(f"{'RESULTADOS DO EX5  (Coeficientes a, b e c)':^90}")
@@ -268,7 +323,7 @@ print(f"c = {c:.6f}\n")
 print(f"Equação Final: Tk = {a:.4f}*TR + {b:.4f}*TC + {c:.4f}")
 print("=" * 90)
 
-# Exercício 1, parte 2 -------------------------------------------------------------------------------
+# 2.6.1 Exercício 1 -------------------------------------------------------------------------------
 
 casos = [(21,11), (41,21), (81,41), (161,81), (321,161)]
 TOLs = [1e-2, 1e-4, 1e-6]
@@ -280,21 +335,22 @@ print("="*90)
 
 print(f"{'Nx':>5} {'Ny':>5} {'TOL':>8} | {'Jacobi(s)':>10} {'Iter':>6} | {'GS(s)':>10} {'Iter':>6}")
 
-for (Nx, Ny) in casos:
-    
-    x_coords = np.linspace(0, Lx, Nx)
-    TB = 10 + 20 * (x_coords / Lx)
-    TT = 10 + 20 * (x_coords / Lx)
-    h = Lx / (Nx - 1)
-    
-    for tol in TOLs:
+if 0 == 1:
+    for (Nx, Ny) in casos:
         
-        Tj, it_j, tj, frame = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
-        Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
+        x_coords = np.linspace(0, Lx, Nx)
+        TB = 10 + 20 * (x_coords / Lx)
+        TT = 10 + 20 * (x_coords / Lx)
+        h = Lx / (Nx - 1)
         
-        print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
+        for tol in TOLs:
+            
+            Tj, it_j, tj, frame = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
+            Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
+            
+            print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
 
-# Exercício 2, parte 2 -------------------------------------------------------------------------------
+# 2.6.1 Exercício 2 -------------------------------------------------------------------------------
 
 Nx = 41 # quando o matheus mexer nas funções de Jacobi e Gaus
 Ny = 21 # mudar para 101 X 51

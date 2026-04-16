@@ -262,27 +262,47 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
     
     b = np.zeros(nunk)
 
+    nos_fixos = []
+    valores_fixos = []
+
     for j in range(Ny):
         for i in range(Nx):
             Ic = ij2n(i, j, Nx)
             
             # Avalia primeiro se é contorno ou círculo
             if i == 0:
-                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TL
+                nos_fixos.append(Ic); valores_fixos.append(TL)
             elif i == Nx - 1:
-                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TR
+                nos_fixos.append(Ic); valores_fixos.append(TR)
             elif j == 0:
-                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TB[i]
+                nos_fixos.append(Ic); valores_fixos.append(TB[i])
             elif j == Ny - 1:
-                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TT[i]
+                nos_fixos.append(Ic); valores_fixos.append(TT[i])
             elif circle_mask[j, i]:
-                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TC
+                nos_fixos.append(Ic); valores_fixos.append(TC)
             
-            # Se não é contorno nem círculo, aplica a fonte de calor no interior
+            # Se não é contorno nem círculo, é nó livre (aplica a fonte)
             else:
                 if fonte is not None:
                     b[Ic] = fonte * h ** 2
- 
+
+    nos_fixos = np.array(nos_fixos)
+    valores_fixos = np.array(valores_fixos)
+
+    A_csc = A.tocsc()
+    for idx, Ic in enumerate(nos_fixos):
+        b -= A_csc[:, Ic].toarray().flatten() * valores_fixos[idx]
+
+    A = A_csc.tolil()
+    
+    for Ic in nos_fixos:
+        A[Ic, :] = 0
+        A[:, Ic] = 0
+        
+    for idx, Ic in enumerate(nos_fixos):
+        A[Ic, Ic] = 1 
+        b[Ic] = valores_fixos[idx]
+
     A = A.tocsr()
     t_montagem = time.time() - t0
  
