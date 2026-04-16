@@ -289,8 +289,8 @@ for (Nx, Ny) in casos:
     
     for tol in TOLs:
         
-        Tj, it_j, tj, frame = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame = 0)
-        Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame = 0)
+        Tj, it_j, tj, frame = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
+        Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
         
         print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
 
