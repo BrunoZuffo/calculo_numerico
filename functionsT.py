@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 from matplotlib import cm
 import pandas as pd
 from shapely.geometry import LineString, Point
