@@ -352,8 +352,8 @@ for (Nx, Ny) in casos:
 
 # 2.6.1 Exercício 2 -------------------------------------------------------------------------------
 
-Nx = 41 # quando o matheus mexer nas funções de Jacobi e Gaus
-Ny = 21 # mudar para 101 X 51
+Nx = 101
+Ny = 51 
 
 Lx = 0.02  # 2 cm
 Ly = 0.01  # 1 cm

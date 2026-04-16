@@ -203,7 +203,7 @@ def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
     if(flag_type == 'contour'):
       fig, ax = plt.subplots(figsize=(6,6))
       ax.set_aspect('equal')
-      ax.set(xlabel='x', ylabel='y', title='Contours of temperature')
+      ax.set(xlabel='x', ylabel='y', title=f'Contours of temperature ({Nx}x{Ny})')
       im = ax.contourf(X, Y, Z, 20, cmap='jet')
       im2 = ax.contour(X, Y, Z, 20, linewidths=0.25, colors='k')
       fig.colorbar(im, ax=ax, orientation='horizontal')
@@ -432,7 +432,7 @@ def GaussSeidel(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT, animation, fram
 def AnimacaoTemperatura(frames, Nx, Ny, Lx, Ly):
     
     if frames is None or len(frames) == 0:
-        print("⚠️ Nenhum frame foi gerado!")
+        print("Nenhum frame foi gerado!")
         return
     
     x = np.linspace(0.0, Lx, Nx)
@@ -441,20 +441,41 @@ def AnimacaoTemperatura(frames, Nx, Ny, Lx, Ly):
     
     fig, ax = plt.subplots(figsize=(6,6))
     
-    vmin = min(frame.min() for frame in frames)
-    vmax = max(frame.max() for frame in frames)
+    # 1. Encontra a temperatura mais fria e mais quente reais da simulação
+    vmin_real = min(frame.min() for frame in frames)
+    vmax_real = max(frame.max() for frame in frames)
+    
+    # 2. A CORREÇÃO: Arredonda os limites para o múltiplo de 5 mais próximo
+    # Ex: se o mínimo for 12, cai para 10. Se o máximo for 41.3, sobe para 45.
+    vmin = int(np.floor(vmin_real / 5) * 5)
+    vmax = int(np.ceil(vmax_real / 5) * 5)
+    
+    # Cria os níveis de cor usando os limites bonitos e arredondados
+    levels = np.linspace(vmin, vmax, 21)
+    
+    Z_init = frames[0].reshape(Ny, Nx)
+    im = ax.contourf(X, Y, Z_init, levels=levels, cmap='jet')
+    
+    # 3. Configura a barra de cores
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Temperatura (°C)')
+    
+    # 4. Força os textos da barra a pularem exatamente de 5 em 5 graus
+    ticks_exatos = np.arange(vmin, vmax + 1, 5)
+    cbar.set_ticks(ticks_exatos)
+    cbar.ax.set_yticklabels([f"{val}°C" for val in ticks_exatos]) # Adiciona o símbolo de grau
     
     def update(frame):
         ax.clear()
         
         Z = frame.reshape(Ny, Nx)
         
-        ax.contourf(X, Y, Z, 20, cmap='jet', vmin=vmin, vmax=vmax)
-        ax.contour(X, Y, Z, 20, linewidths=0.25, colors='k')
+        ax.contourf(X, Y, Z, levels=levels, cmap='jet')
+        ax.contour(X, Y, Z, levels=levels, linewidths=0.25, colors='k')
         
-        ax.set_title("Evolução da Temperatura")
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
+        ax.set_title(f"Evolução da Temperatura ({Nx}×{Ny})")
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
         ax.set_aspect('equal')
         
         ax.set_xticks([0, Lx/2, Lx])
@@ -470,4 +491,5 @@ def AnimacaoTemperatura(frames, Nx, Ny, Lx, Ly):
         repeat=False
     )
     
+    plt.tight_layout() 
     plt.show()
