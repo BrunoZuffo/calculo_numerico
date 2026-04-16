@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 from matplotlib import cm
 import pandas as pd
 from shapely.geometry import LineString, Point
@@ -291,3 +292,185 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
     T_grid = T.reshape((Ny, Nx))
  
     return T_grid, t_assembly, t_montagem, t_sistema, circle_mask
+
+# FUNÇÃO Jacobi --------------------------------------------------------------------------
+
+def Jacobi(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT, animation, frame_skip):
+    
+    nunk = Nx * Ny
+    
+    A = Assembly(Nx, Ny, k)
+    b = np.zeros(nunk)
+    
+    if fonte is not None:
+        b += fonte * h**2
+    
+    # aplicar contorno
+    for i in range(Nx):
+        for j in range(Ny):
+            Ic = ij2n(i, j, Nx)
+            
+            if i == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TL
+            elif i == Nx-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TR
+            elif j == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TB[i]
+            elif j == Ny-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TT[i]
+    
+    x = np.zeros(nunk)
+    F = A @ x - b
+    
+    M = np.diag(np.diag(A))
+    
+    k_iter = 0
+
+    frames = [] if animation else None
+
+    t0 = time.time()
+    
+    while np.linalg.norm(F, np.inf) > TOL and k_iter < MAXIT:
+        
+        d = np.linalg.solve(M, -F)
+        
+        beta = 1.0
+        x = x + beta * d
+        
+        F = A @ x - b
+        
+        k_iter += 1
+
+        if animation:
+            if k_iter % frame_skip == 0:
+                frames.append(x.reshape((Ny, Nx)).copy())
+    
+    tempo = time.time() - t0
+    
+    T_grid = x.reshape((Ny, Nx))
+    
+    return T_grid, k_iter, tempo, frames
+
+# FUNÇÃO Gauss-Seidel --------------------------------------------------------------------------
+
+def GaussSeidel(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT, animation, frame_skip):
+    
+    nunk = Nx * Ny
+    
+    A = Assembly(Nx, Ny, k)
+    b = np.zeros(nunk)
+
+
+    for j in range(Ny):
+        for i in range(Nx):
+            Ic = ij2n(i, j, Nx)
+            is_border = (i == 0 or i == Nx - 1 or j == 0 or j == Ny - 1)
+            if fonte is not None and not is_border and not circle_mask[j, i]:
+                b[Ic] = fonte * h ** 2
+
+    for i in range(Nx):
+        for j in range(Ny):
+ 
+            Ic = ij2n(i, j, Nx)
+            
+            if i == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TL
+            elif i == Nx-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TR
+            elif j == 0:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TB[i]
+            elif j == Ny-1:
+                A[Ic,:] = 0
+                A[Ic,Ic] = 1
+                b[Ic] = TT[i]
+    
+    x = np.zeros(nunk)
+    F = A @ x - b
+    
+    M = np.tril(A)
+    
+    k_iter = 0
+
+    frames = [] if animation else None
+
+    t0 = time.time()
+    
+    while np.linalg.norm(F, np.inf) > TOL and k_iter < MAXIT:
+        
+        d = np.linalg.solve(M, -F)
+        
+        beta = 1.0
+        x = x + beta * d
+        
+        F = A @ x - b
+        
+        k_iter += 1
+
+        if animation:
+            if k_iter % frame_skip == 0:
+                frames.append(x.reshape((Ny, Nx)).copy())
+
+    tempo = time.time() - t0
+    
+    T_grid = x.reshape((Ny, Nx))
+    
+    return T_grid, k_iter, tempo, frames
+
+# FUNÇÃO AnimacaoTemperatura --------------------------------------------------------------------------
+
+def AnimacaoTemperatura(frames, Nx, Ny, Lx, Ly):
+    
+    if frames is None or len(frames) == 0:
+        print("⚠️ Nenhum frame foi gerado!")
+        return
+    
+    x = np.linspace(0.0, Lx, Nx)
+    y = np.linspace(0.0, Ly, Ny)
+    X, Y = np.meshgrid(x, y)
+    
+    fig, ax = plt.subplots(figsize=(6,6))
+    
+    vmin = min(frame.min() for frame in frames)
+    vmax = max(frame.max() for frame in frames)
+    
+    def update(frame):
+        ax.clear()
+        
+        Z = frame.reshape(Ny, Nx)
+        
+        ax.contourf(X, Y, Z, 20, cmap='jet', vmin=vmin, vmax=vmax)
+        ax.contour(X, Y, Z, 20, linewidths=0.25, colors='k')
+        
+        ax.set_title("Evolução da Temperatura")
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_aspect('equal')
+        
+        ax.set_xticks([0, Lx/2, Lx])
+        ax.set_yticks([0, Ly/2, Ly])
+        
+        return []
+    
+    ani = animation.FuncAnimation(
+        fig,
+        update,
+        frames=frames,
+        interval=200,
+        repeat=False
+    )
+    
+    plt.show()
