@@ -138,8 +138,7 @@ def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
     b = np.zeros(nunk)
     
     if fonte is not None:
-        b += fonte * h**2
-    
+        b += fonte * h**2    
 
     # 4. Aplicar condições de contorno (Abordagem Simétrica)   
 
