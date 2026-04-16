@@ -335,20 +335,20 @@ print("="*90)
 
 print(f"{'Nx':>5} {'Ny':>5} {'TOL':>8} | {'Jacobi(s)':>10} {'Iter':>6} | {'GS(s)':>10} {'Iter':>6}")
 
-if 0 == 1:
-    for (Nx, Ny) in casos:
+
+for (Nx, Ny) in casos:
+    
+    x_coords = np.linspace(0, Lx, Nx)
+    TB = 10 + 20 * (x_coords / Lx)
+    TT = 10 + 20 * (x_coords / Lx)
+    h = Lx / (Nx - 1)
+    
+    for tol in TOLs:
         
-        x_coords = np.linspace(0, Lx, Nx)
-        TB = 10 + 20 * (x_coords / Lx)
-        TT = 10 + 20 * (x_coords / Lx)
-        h = Lx / (Nx - 1)
+        Tj, it_j, tj, frame = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
+        Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
         
-        for tol in TOLs:
-            
-            Tj, it_j, tj, frame = Jacobi(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
-            Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
-            
-            print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
+        print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
 
 # 2.6.1 Exercício 2 -------------------------------------------------------------------------------
 
