@@ -7,6 +7,7 @@ from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
+from scipy.linalg import solve_triangular
 import time
 
 def ij2n (i, j, Nx):
@@ -139,34 +140,44 @@ def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
     if fonte is not None:
         b += fonte * h**2
     
-    # 4. Aplicar condições de contorno
+
+    # 4. Aplicar condições de contorno (Abordagem Simétrica)   
+
+    nos_contorno = []
+    valores_contorno = []
+
     for i in range(Nx):
         for j in range(Ny):
-            
             Ic = ij2n(i, j, Nx)
-            
-            if i == 0:  # esquerda
-                A[Ic, :] = 0
-                A[Ic, Ic] = 1
-                b[Ic] = TL
-                
-            elif i == Nx-1:  # direita
-                A[Ic, :] = 0
-                A[Ic, Ic] = 1
-                b[Ic] = TR
-                
-            elif j == 0:  # base
-                A[Ic, :] = 0
-                A[Ic, Ic] = 1
-                b[Ic] = TB[i]
-                
-            elif j == Ny-1:  # topo
-                A[Ic, :] = 0
-                A[Ic, Ic] = 1
-                b[Ic] = TT[i]
+            if i == 0:
+                nos_contorno.append(Ic); valores_contorno.append(TL)
+            elif i == Nx - 1:
+                nos_contorno.append(Ic); valores_contorno.append(TR)
+            elif j == 0:
+                nos_contorno.append(Ic); valores_contorno.append(TB[i])
+            elif j == Ny - 1:
+                nos_contorno.append(Ic); valores_contorno.append(TT[i])
+
+    nos_contorno = np.array(nos_contorno)
+    valores_contorno = np.array(valores_contorno)
+
+    A_csc = A.tocsc()
+
+    for idx, Ic in enumerate(nos_contorno):
+        b -= A_csc[:, Ic].toarray().flatten() * valores_contorno[idx]
+
+    A = A_csc.tolil()
     
+    for Ic in nos_contorno:
+        A[Ic, :] = 0  # Zera a linha
+        A[:, Ic] = 0  # Zera a coluna (Garante a Simetria!)
+
+    for idx, Ic in enumerate(nos_contorno):
+        A[Ic, Ic] = 1
+        b[Ic] = valores_contorno[idx]
+
     # 5. Converter para CSR (eficiente)
-    A = A.tocsr()
+    A = A.tocsr() # Matriz simétrica final pronta para resolução
 
     t_montagem = time.time() - t0
 
@@ -174,7 +185,7 @@ def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
     t0 = time.time()
     
     # 6. Resolver sistema
-    T = spsolve(A, b)
+    T = spsolve(A, b) # a função spsolve identifica que A é simétrica e usa um método otimizado para resolver o sistema
 
     t_sistema = time.time() - t0
     
@@ -182,7 +193,6 @@ def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
     T_grid = T.reshape((Ny, Nx))
     
     return T_grid, t_assembly, t_montagem, t_sistema
-
 
 # FUNÇÃO PlotaPlaca --------------------------------------------------------------------------
 
@@ -250,36 +260,29 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
  
     # Tempo de montagem do sistema 
     t0 = time.time()
- 
+    
     b = np.zeros(nunk)
-
 
     for j in range(Ny):
         for i in range(Nx):
             Ic = ij2n(i, j, Nx)
-            is_border = (i == 0 or i == Nx - 1 or j == 0 or j == Ny - 1)
-            if fonte is not None and not is_border and not circle_mask[j, i]:
-                b[Ic] = fonte * h ** 2
-
-    for i in range(Nx):
-        for j in range(Ny):
- 
-            Ic = ij2n(i, j, Nx)
- 
-            if i == 0:           # borda esquerda
-                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TL
- 
-            elif i == Nx - 1:    # borda direita
-                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TR
- 
-            elif j == 0:         # borda inferior
-                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TB[i]
- 
-            elif j == Ny - 1:    # borda superior
-                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TT[i]
- 
-            elif circle_mask[j, i]:   # região circular interna
-                A[Ic, :] = 0;  A[Ic, Ic] = 1;  b[Ic] = TC
+            
+            # Avalia primeiro se é contorno ou círculo
+            if i == 0:
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TL
+            elif i == Nx - 1:
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TR
+            elif j == 0:
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TB[i]
+            elif j == Ny - 1:
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TT[i]
+            elif circle_mask[j, i]:
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TC
+            
+            # Se não é contorno nem círculo, aplica a fonte de calor no interior
+            else:
+                if fonte is not None:
+                    b[Ic] = fonte * h ** 2
  
     A = A.tocsr()
     t_montagem = time.time() - t0
@@ -296,138 +299,113 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
 # FUNÇÃO Jacobi --------------------------------------------------------------------------
 
 def Jacobi(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT, animation, frame_skip):
-    
     nunk = Nx * Ny
     
-    A = Assembly(Nx, Ny, k)
+    # 1. Montagem da Matriz Esparsa (Idêntico ao SolveSystemSparse)
+    d0 = np.ones(nunk) * 4.0 * k
+    d1 = -np.ones(nunk - 1) * k
+    dN = -np.ones(nunk - Nx) * k
+    for i in range(1, Ny): d1[i * Nx - 1] = 0
+    A = sparse.diags([dN, d1, d0, d1, dN], [-Nx, -1, 0, 1, Nx], format='lil')
+    
     b = np.zeros(nunk)
     
-    if fonte is not None:
-        b += fonte * h**2
-    
-    # aplicar contorno
+    # 2. Único laço para Contornos e Fonte
     for i in range(Nx):
         for j in range(Ny):
             Ic = ij2n(i, j, Nx)
-            
             if i == 0:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TL
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TL
             elif i == Nx-1:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TR
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TR
             elif j == 0:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TB[i]
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TB[i]
             elif j == Ny-1:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TT[i]
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TT[i]
+            else:
+                if fonte is not None:
+                    b[Ic] = fonte * h**2
+                    
+    A = A.tocsr()
     
+    # 3. Preparação do Jacobi
+    diag_A = A.diagonal() 
     x = np.zeros(nunk)
-    F = A @ x - b
-    
-    M = np.diag(np.diag(A))
+    F = A.dot(x) - b   
     
     k_iter = 0
-
     frames = [] if animation else None
-
     t0 = time.time()
     
+    # 4. Loop Iterativo
     while np.linalg.norm(F, np.inf) > TOL and k_iter < MAXIT:
-        
-        d = np.linalg.solve(M, -F)
-        
-        beta = 1.0
-        x = x + beta * d
-        
-        F = A @ x - b
-        
+        d = -F / diag_A   # Divisão Vetorial Direta
+        x = x + d
+        F = A.dot(x) - b
         k_iter += 1
+        
+        if animation and (k_iter % frame_skip == 0):
+            frames.append(x.reshape((Ny, Nx)).copy())
 
-        if animation:
-            if k_iter % frame_skip == 0:
-                frames.append(x.reshape((Ny, Nx)).copy())
-    
     tempo = time.time() - t0
-    
     T_grid = x.reshape((Ny, Nx))
-    
     return T_grid, k_iter, tempo, frames
 
 # FUNÇÃO Gauss-Seidel --------------------------------------------------------------------------
 
+from scipy.sparse.linalg import spsolve_triangular
+
 def GaussSeidel(Nx, Ny, h, k, TL, TR, TB, TT, fonte, TOL, MAXIT, animation, frame_skip):
-    
     nunk = Nx * Ny
     
-    A = Assembly(Nx, Ny, k)
+    # 1. Montagem da Matriz Esparsa
+    d0 = np.ones(nunk) * 4.0 * k
+    d1 = -np.ones(nunk - 1) * k
+    dN = -np.ones(nunk - Nx) * k
+    for i in range(1, Ny): d1[i * Nx - 1] = 0
+    A = sparse.diags([dN, d1, d0, d1, dN], [-Nx, -1, 0, 1, Nx], format='lil')
+    
     b = np.zeros(nunk)
-
-
-    for j in range(Ny):
-        for i in range(Nx):
-            Ic = ij2n(i, j, Nx)
-            is_border = (i == 0 or i == Nx - 1 or j == 0 or j == Ny - 1)
-            if fonte is not None and not is_border and not circle_mask[j, i]:
-                b[Ic] = fonte * h ** 2
-
+    
+    # 2. Aplicação do Contorno e Fonte
     for i in range(Nx):
         for j in range(Ny):
- 
             Ic = ij2n(i, j, Nx)
-            
             if i == 0:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TL
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TL
             elif i == Nx-1:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TR
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TR
             elif j == 0:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TB[i]
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TB[i]
             elif j == Ny-1:
-                A[Ic,:] = 0
-                A[Ic,Ic] = 1
-                b[Ic] = TT[i]
+                A[Ic, :] = 0; A[Ic, Ic] = 1; b[Ic] = TT[i]
+            else:
+                if fonte is not None:
+                    b[Ic] = fonte * h**2
+                    
+    A = A.tocsr()
     
+    # 3. Preparação do Gauss-Seidel Esparso
+    M = sparse.tril(A, format='csr')
     x = np.zeros(nunk)
-    F = A @ x - b
-    
-    M = np.tril(A)
+    F = A.dot(x) - b
     
     k_iter = 0
-
     frames = [] if animation else None
-
     t0 = time.time()
     
+    # 4. Loop Iterativo
     while np.linalg.norm(F, np.inf) > TOL and k_iter < MAXIT:
-        
-        d = np.linalg.solve(M, -F)
-        
-        beta = 1.0
-        x = x + beta * d
-        
-        F = A @ x - b
-        
+        d = spsolve_triangular(M, -F, lower=True) 
+        x = x + d
+        F = A.dot(x) - b
         k_iter += 1
 
-        if animation:
-            if k_iter % frame_skip == 0:
-                frames.append(x.reshape((Ny, Nx)).copy())
+        if animation and (k_iter % frame_skip == 0):
+            frames.append(x.reshape((Ny, Nx)).copy())
 
     tempo = time.time() - t0
-    
     T_grid = x.reshape((Ny, Nx))
-    
     return T_grid, k_iter, tempo, frames
 
 # FUNÇÃO AnimacaoTemperatura --------------------------------------------------------------------------
