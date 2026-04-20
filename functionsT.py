@@ -315,6 +315,7 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
     T_grid = T.reshape((Ny, Nx))
  
     return T_grid, t_assembly, t_montagem, t_sistema, circle_mask
+
 # FUNÇÃO Prepara_Sistema_Otimizado ---------------------------------------------------------
 # Essa monta a matriz e fatora (LU) uma única vez, para ser usada em métodos iterativos onde a matriz não muda.
 
