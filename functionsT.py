@@ -110,7 +110,6 @@ def SolveSystem(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
 # FUNÇÃO SolveSystemSparse --------------------------------------------------------------------------
 def SolveSystemSparse(Nx, Ny, h, k, TL, TR, TB, TT, fonte):
 
-
     nunk = Nx * Ny
     
     #tempo para a montagem da matriz
