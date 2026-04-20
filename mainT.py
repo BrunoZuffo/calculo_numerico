@@ -64,11 +64,11 @@ for (Nx, Ny) in casos:
 
     h = Lx / (Nx - 1)
     x_coords = np.linspace(0, Lx, Nx)
-    TB = 10 + 20 * (x_coords / Lx)
-    TT = 10 + 20 * (x_coords / Lx)
+    TB = 10 + 20 * (x_coords / Lx) # Gradiente na base
+    TT = 10 + 20 * (x_coords / Lx) # Gradiente no topo
     
     # DENSO
-    if Nx <= 161: # o computador não tem memória suficiente para resolver o caso 321 X 161 sem usar matriz esparsa
+    if Nx <= 161: 
         T_d, tA_d, tM_d, tS_d = SolveSystem(Nx, Ny, h, K, TL, TR, TB, TT, fonte)
     else:
         T_d, tA_d, tM_d, tS_d = None, None, None, None
@@ -76,28 +76,34 @@ for (Nx, Ny) in casos:
     # ESPARSO
     T_s, tA_s, tM_s, tS_s = SolveSystemSparse(Nx, Ny, h, K, TL, TR, TB, TT, fonte)
     
+    # TEMPERATURA MÁXIMA
+    T_max = np.max(T_s)
+    
     resultados.append([
         Nx, Ny,
         tA_d, tM_d, tS_d,
-        tA_s, tM_s, tS_s
+        tA_s, tM_s, tS_s,
+        T_max
     ])
     
     # CONTOUR
     PlotaPlaca(Nx, Ny, Lx, Ly, T_s)
     
-    # PERFIL CENTRAL (gráfio da temperatura em função do eixo X)
+    # PERFIL CENTRAL (gráfico da temperatura em função do eixo X)
     linha_central = Ny // 2
     perfil = T_s[linha_central, :]
     
     x = np.linspace(0, Lx, Nx)
     
     plt.plot(x, perfil)
-    plt.title(f'Temperatura ao Longo do Eixo Central ({Nx} X {Ny})')
+    # Título atualizado com o T_max!
+    plt.title(f'Eixo Central ({Nx} X {Ny}) | Temp. Máxima: {T_max:.3f} °C')
     plt.xlabel('x (m)')
     plt.ylabel('Temperatura (°C)')
     plt.grid()
     plt.show()
 
+# --- TABELA 1: DESEMPENHO (DENSO vs ESPARSO) ---
 print("\n" + "="*90)
 print(f"{'COMPARAÇÃO DE TEMPOS (DENSO vs ESPARSO)':^90}")
 print("="*90)
@@ -121,8 +127,18 @@ for r in resultados:
         f"{(f'{r[6]:.4f}' if r[6] is not None else '---'):>10} "
         f"{(f'{r[7]:.4f}' if r[7] is not None else '---'):>10}"
     )
-
 print("="*90)
+
+# --- TABELA 2: CONVERGÊNCIA DA TEMPERATURA MÁXIMA ---
+print("\n" + "="*45)
+print(f"{'CONVERGÊNCIA DA TEMPERATURA MÁXIMA':^45}")
+print("="*45)
+print(f"{'Nx':>5} | {'Ny':>5} | {'T_max (°C)':>15}")
+print("-" * 45)
+
+for r in resultados:
+    print(f"{r[0]:5d} | {r[1]:5d} | {r[8]:15.4f}")
+print("="*45)
 
 # 2.5.1 Exercício 2 ----------------------------------------------------------------------------------------------
 
@@ -187,22 +203,24 @@ for (Nx, Ny) in casos_ex2:
  
 # Tabela de resultados 
 print("\n" + "=" * 90)
-print(f"{'RESULTADOS DO EX2  (Região Circular  TC = 30°C)':^90}")
+print(f"{'RESULTADOS DO EX2 (Região Circular TC = 30°C)':^90}")
 print("=" * 90)
  
+# Cabeçalho com espaçamentos ajustados e barras separadoras
 header2 = (
-    f"{'Nx':>5} {'Ny':>5} | "
-    f"{'Mont. (S)':>10} {'Sist.(S)':>10} {'Resol. (sS)':>10} | "
-    f"{'T_max (°C)':>10}"
+    f"{'Nx':>6} | {'Ny':>6} | "
+    f"{'Mont.(S)':>12} | {'Sist.(S)':>12} | {'Resol.(S)':>12} | "
+    f"{'T_max (°C)':>15}"
 )
 print(header2)
 print("-" * 90)
  
+# Valores alinhados perfeitamente com o cabeçalho
 for r in resultados_ex2:
     print(
-        f"{r[0]:5d} {r[1]:5d} | "
-        f"{r[2]:10.4f} {r[3]:10.4f} {r[4]:10.4f} | "
-        f"{r[5]:10.3f}"
+        f"{r[0]:6d} | {r[1]:6d} | "
+        f"{r[2]:12.4f} | {r[3]:12.4f} | {r[4]:12.4f} | "
+        f"{r[5]:15.3f}"
     )
  
 print("=" * 90)
@@ -334,7 +352,7 @@ print(f"{'COMPARAÇÃO DE MÉTODOS (JACOBI vs GAUSS-SEIDEL)':^90}")
 print("="*90)
 
 print(f"{'Nx':>5} {'Ny':>5} {'TOL':>8} | {'Jacobi(s)':>10} {'Iter':>6} | {'GS(s)':>10} {'Iter':>6}")
-
+print("-" * 90)
 
 for (Nx, Ny) in casos:
     
@@ -349,6 +367,8 @@ for (Nx, Ny) in casos:
         Tg, it_g, tg, frame = GaussSeidel(Nx, Ny, h, K, TL, TR, TB, TT, fonte, tol, MAXITER, animation = False, frame_skip = 0)
         
         print(f"{Nx:5d} {Ny:5d} {tol:8.0e} | {tj:10.4f} {it_j:6d} | {tg:10.4f} {it_g:6d}")
+
+print("="*90)
 
 # 2.6.1 Exercício 2 -------------------------------------------------------------------------------
 
