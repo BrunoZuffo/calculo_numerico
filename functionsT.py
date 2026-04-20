@@ -547,3 +547,86 @@ def AnimacaoTemperatura(frames, Nx, Ny, Lx, Ly):
     
     plt.tight_layout() 
     plt.show()
+
+# EXERCICIO 3 -------------------------------------------------------------------------
+# aqui a condutividade nao é mais constante, entao vamos implementar o caso com uma funcao de x,y apresentada
+# Até agora, assembly, solve system e SolveSystemSparse assumem um stencil com k uniforme, usando sempre diagonal 4*k e vizinhos -k, mas aqui nao podemos usar isso.
+# Cada nó interno tem coeficientes diferentes por que cada face tem um k diferente
+# 
+#  
+def k_var(x, y, Lx, Ly):
+    return 0.2 + 0.05 * np.sin(3.0 * np.pi * x / Lx) * np.sin(3.0 * np.pi * y / Ly)  # funcao senoidal apresentada no arquivo do tidia
+
+def SolveSystemSparse_VarK(Nx, Ny, h, TL, TR, TB, TT, fonte, Lx, Ly):
+    nunk = Nx * Ny
+
+    # coordenadas dos nós
+    x_coords = np.linspace(0.0, Lx, Nx)
+    y_coords = np.linspace(0.0, Ly, Ny)
+
+    # montagem da matriz
+    t0 = time.time()
+    A = sparse.lil_matrix((nunk, nunk))
+    t_assembly_ini = time.time()
+
+    # vetor b
+    b = np.zeros(nunk)
+
+    for j in range(Ny):
+        for i in range(Nx):
+            Ic = ij2n(i, j, Nx)
+
+            # contornos de Dirichlet
+            if i == 0:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TL
+
+            elif i == Nx - 1:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TR
+
+            elif j == 0:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TB[i]
+
+            elif j == Ny - 1:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TT[i]
+
+            else:
+                x_i = x_coords[i]
+                y_j = y_coords[j]
+
+                # k avaliado nas faces
+                kw = k_var(x_i - 0.5*h, y_j,       Lx, Ly)
+                ke = k_var(x_i + 0.5*h, y_j,       Lx, Ly)
+                ks = k_var(x_i,       y_j - 0.5*h, Lx, Ly)
+                kn = k_var(x_i,       y_j + 0.5*h, Lx, Ly)
+
+                Iw = ij2n(i-1, j, Nx)
+                Ie = ij2n(i+1, j, Nx)
+                Is = ij2n(i, j-1, Nx)
+                In = ij2n(i, j+1, Nx)
+
+                A[Ic, Ic] = kw + ke + ks + kn
+                A[Ic, Iw] = -kw
+                A[Ic, Ie] = -ke
+                A[Ic, Is] = -ks
+                A[Ic, In] = -kn
+
+                if fonte is not None:
+                    b[Ic] = fonte * h**2
+
+    t_assembly = time.time() - t_assembly_ini
+
+    # resolução
+    t0 = time.time()
+    A = A.tocsr()
+    t_montagem = time.time() - t0
+
+    t0 = time.time()
+    T = spsolve(A, b)
+    t_sistema = time.time() - t0
+
+    T_grid = T.reshape((Ny, Nx))
+    return T_grid, t_assembly, t_montagem, t_sistema
