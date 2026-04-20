@@ -8,6 +8,7 @@ from shapely.ops import unary_union
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 from scipy.linalg import solve_triangular
+from scipy.sparse.linalg import splu
 import time
 
 def ij2n (i, j, Nx):
@@ -314,6 +315,59 @@ def SolveSystemSparse_Circle(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc,
     T_grid = T.reshape((Ny, Nx))
  
     return T_grid, t_assembly, t_montagem, t_sistema, circle_mask
+# FUNÇÃO Prepara_Sistema_Otimizado ---------------------------------------------------------
+# Essa monta a matriz e fatora (LU) uma única vez, para ser usada em métodos iterativos onde a matriz não muda.
+
+def Prepara_Sistema_Otimizado(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc, yc):
+
+    nunk = Nx * Ny
+    x_coords = np.linspace(0, Lx, Nx)
+    y_coords = np.linspace(0, Ly, Ny)
+
+    circle_mask = np.zeros((Ny, Nx), dtype=bool)
+    for j in range(Ny):
+        for i in range(Nx):
+            dist = np.sqrt((x_coords[i] - xc)**2 + (y_coords[j] - yc)**2)
+            if dist <= R:
+                circle_mask[j, i] = True
+    
+    # Montagem da matriz A (Simétrica e Esparsa)
+    d0, d1, dN = np.ones(nunk)*4*k, -np.ones(nunk-1)*k, -np.ones(nunk-Nx)*k
+    for i in range(1, Ny): d1[i*Nx-1] = 0
+    A = sparse.diags([dN, d1, d0, d1, dN], [-Nx, -1, 0, 1, Nx], format='lil')
+    
+    # Vetor b_base (Fonte de calor e contornos fixos, SEM o círculo ainda)
+    b_base = np.zeros(nunk)
+    nos_fixos = []
+    
+    for j in range(Ny):
+        for i in range(Nx):
+            Ic = ij2n(i, j, Nx)
+            if i == 0: nos_fixos.append(Ic); b_base[Ic] = TL
+            elif i == Nx-1: nos_fixos.append(Ic); b_base[Ic] = TR
+            elif j == 0: nos_fixos.append(Ic); b_base[Ic] = TB[i]
+            elif j == Ny-1: nos_fixos.append(Ic); b_base[Ic] = TT[i]
+            elif circle_mask[j, i]: nos_fixos.append(Ic)
+            else: b_base[Ic] = fonte * h**2
+
+    # Aplicar zeros na matriz para os nós fixos (Dirichlet)
+    for Ic in nos_fixos:
+        A[Ic, :] = 0; A[Ic, Ic] = 1
+        
+    A_fatorada = splu(A.tocsc()) 
+    
+    return A_fatorada, b_base, circle_mask.flatten()
+
+# FUNÇÃO Resolve_Rapido --------------------------------------------------------------------------
+# Resolve o sistemae em milissegundos usando a matriz já fatorada. Ideal para métodos iterativos onde só o lado direito muda (ex: TC do círculo).
+
+def Resolve_Rapido(A_fatorada, b_base, circle_mask_1d, TC_atual):
+
+    b = b_base.copy()
+    b[circle_mask_1d] = TC_atual # Atualiza apenas os pontos do círculo
+    
+    T = A_fatorada.solve(b) # Resolve por substituição
+    return T
 
 # FUNÇÃO Jacobi --------------------------------------------------------------------------
 
