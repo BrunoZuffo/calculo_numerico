@@ -359,7 +359,7 @@ def Prepara_Sistema_Otimizado(Nx, Ny, h, k, TL, TR, TB, TT, fonte, Lx, Ly, R, xc
     return A_fatorada, b_base, circle_mask.flatten()
 
 # FUNÇÃO Resolve_Rapido --------------------------------------------------------------------------
-# Resolve o sistemae em milissegundos usando a matriz já fatorada. Ideal para métodos iterativos onde só o lado direito muda (ex: TC do círculo).
+# Resolve o sistema em milissegundos usando a matriz já fatorada. Ideal para métodos iterativos onde só o lado direito muda (ex: TC do círculo).
 
 def Resolve_Rapido(A_fatorada, b_base, circle_mask_1d, TC_atual):
 
