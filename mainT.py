@@ -224,6 +224,7 @@ for r in resultados_ex2:
     )
  
 print("=" * 90)
+
 # 2.5.1 Exercício 3 ----------------------------------------------------------------------------------------------
 
 casos_ex3 = [(21,11), (41,21), (81,41), (161,81), (321,161)]
@@ -260,13 +261,23 @@ for (Nx, Ny) in casos_ex3:
     plt.show()
 
 print("\n" + "="*90)
-print(f"{'RESULTADOS DO EX3 (k variável)':^90}")
+print(f"{'RESULTADOS DO EX3 (Condutividade Variável k(x,y))':^90}")
 print("="*90)
-print(f"{'Nx':>6} | {'Ny':>6} | {'Mont.(A)':>12} | {'Conv.CSR':>12} | {'Resol.':>12} | {'T_max (°C)':>15}")
-print("-"*90)
+
+header3 = (
+    f"{'Nx':>6} | {'Ny':>6} | "
+    f"{'Mont. (s)':>12} | {'Sist. (s)':>12} | {'Resol. (s)':>12} | "
+    f"{'T_max (°C)':>14}"
+)
+print(header3)
+print("-" * 90)
 
 for r in resultados_ex3:
-    print(f"{r[0]:6d} | {r[1]:6d} | {r[2]:12.4f} | {r[3]:12.4f} | {r[4]:12.4f} | {r[5]:15.4f}")
+    print(
+        f"{r[0]:6d} | {r[1]:6d} | "
+        f"{r[2]:12.4f} | {r[3]:12.4f} | {r[4]:12.4f} | "
+        f"{r[5]:14.4f}"
+    )
 
 print("="*90)
 
