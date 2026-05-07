@@ -1,55 +1,124 @@
 import numpy as np
-from scipy.sparse.linalg import eigsh
+import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("TkAgg")
+from scipy.sparse.linalg import eigsh
 
-from functionsM import BuildMatrizes_Eigen, PlotaModo
+# Importa a função construtora base
+from functionsM import BuildMatrizes_Eigen_Circular
 
-# ==============================================================================
-# TESTE DA BASE DO CAPÍTULO 3 (SEÇÃO 3.4)
-# Resolvendo os modos fundamentais de uma membrana quadrada de teste
-# ==============================================================================
+# INÍCIO ----------------------------------------------------------------------------------
+# Parâmetros físicos gerais e fixos do problema (Seção 3.5 do PDF)
 
-# Parâmetros Arbitrários (Malha e Geometria)
-N1 = 41
-N2 = 41
-Lx = 1.0
-Ly = 1.0
-h = Lx / (N1 - 1)
+sigma = 200.0     # Tensão (N/m)
+rho = 900.0       # Densidade (kg/m^3)
+e_esp = 0.1e-3    # Espessura (m) -> 0.1 mm
+R = 0.4e-2        # Raio (m) -> 0.4 cm
 
-# Propriedades Físicas (Arbitrárias para testar a consistência matricial)
-sigma = 1.0  # Tensão
-rho = 1.0    # Densidade
-e = 1.0      # Espessura
+# Fator de conversão dimensional: f_k = (w_ad / 2pi) * (1/R) * sqrt(sigma / (rho * e_esp))
+fator_Hz = (1.0 / (2.0 * np.pi * R)) * np.sqrt(sigma / (rho * e_esp))
 
-# 1. Construção das Matrizes
-print(f"Construindo matrizes K e M para malha de {N1}x{N2} nós...")
-K, M = BuildMatrizes_Eigen(N1, N2, sigma, rho, e, h)
+# Parâmetros adimensionais para o motor algébrico
+Lx_ad = 2.0
+Ly_ad = 2.0
+sigma_ad = 1.0
+rho_ad = 1.0
+e_ad = 1.0
 
-# 2. Resolução do Problema Generalizado de Autovalores
-# Estamos interessados apenas nos modos de menor frequência (frequências fundamentais)
-num_modos = 10
-print(f"Extraindo os {num_modos} primeiros modos de vibração usando 'eigsh'...")
+# 3.5.1 Exercício 1 -------------------------------------------------------------------------------
 
-# eigsh resolve: K * Phi = lambda * M * Phi
-# which='SM' -> Smallest in Magnitude (ignora os autovalores de penalidade "big_number")
-lambdas, Phi = eigsh(K, k=num_modos, M=M, which='SM')
+N1_ex1 = 61
+N2_ex1 = 61
+h_ex1 = Lx_ad / (N1_ex1 - 1)
 
-# As frequências naturais (rad/s) são a raiz quadrada dos autovalores
-omegas = np.sqrt(np.abs(lambdas))
+K_ex1, M_ex1 = BuildMatrizes_Eigen_Circular(N1_ex1, N2_ex1, sigma_ad, rho_ad, e_ad, h_ex1)
 
-# 3. Impressão dos Resultados
-print("\n" + "="*45)
-print(f"{'FREQUÊNCIAS NATURAIS DE OSCILAÇÃO':^45}")
-print("="*45)
-print(f"{'Modo':>10} | {'Autovalor (lambda)':>20} | {'Frequência w (rad/s)':>20}")
-print("-" * 55)
+diag_K = K_ex1.diagonal()
+mask_visual = diag_K.reshape((N2_ex1, N1_ex1))
 
-for i in range(num_modos):
-    print(f"{i+1:10d} | {lambdas[i]:20.4f} | {omegas[i]:20.4f}")
-print("=" * 55)
+plt.figure(figsize=(6,6))
+plt.imshow(mask_visual > 1e5, extent=[0, Lx_ad, 0, Ly_ad], origin='lower', cmap='viridis')
+plt.title(f"Validação do Exercício 1: Máscara da Membrana ({N1_ex1}x{N2_ex1})\n(Região Amarela = Pontos Fixos)")
+plt.xlabel(r"$\hat{x}$")
+plt.ylabel(r"$\hat{y}$")
 
-# 4. Plotagem Gráfica
-# Visualizando a topologia dos 3 primeiros modos
-for i in range(3):
-    PlotaModo(N1, N2, Lx, Ly, Phi[:, i], i+1, omegas[i])
+plt.show() 
+
+# 3.5.1 Exercício 2 -------------------------------------------------------------------------------
+
+print("\n" + "="*115)
+print(f"{'RESULTADOS DO EX2 (Convergência e Modos de Vibração)':^115}")
+print("="*115)
+
+casos_ex2 = [(21, 21), (41, 41), (61, 61), (81, 81), (101, 101)]
+resultados_ex2 = []
+
+Phi_final = None
+omega_final = None
+f_final = None
+
+print(f"{'Malha':<10} | " + " | ".join([f"f{i+1:<7}" for i in range(10)]))
+print("-" * 115)
+
+for Nx, Ny in casos_ex2:
+    h = Lx_ad / (Nx - 1)
+    
+    K, M = BuildMatrizes_Eigen_Circular(Nx, Ny, sigma_ad, rho_ad, e_ad, h)
+    
+    # Extração de autovalores pelo método de Krylov
+    lambdas, Phi = eigsh(K, k=10, M=M, which='SM')
+    
+    # Ordenação forçada (menor energia para maior)
+    idx = np.argsort(lambdas)
+    lambdas = lambdas[idx]
+    Phi = Phi[:, idx]
+    
+    omega_ad = np.sqrt(np.abs(lambdas))
+    f_Hz = omega_ad * fator_Hz
+    
+    resultados_ex2.append((Nx, f_Hz))
+    
+    linha = f"{Nx}x{Ny:<8} | " + " | ".join([f"{f:7.1f}" for f in f_Hz])
+    print(linha)
+    
+    # Guarda as matrizes da malha mais refinada para a renderização 3D
+    if Nx == 101:
+        Phi_final = Phi
+        omega_final = omega_ad
+        f_final = f_Hz
+        
+print("=" * 115)
+
+fig = plt.figure(figsize=(20, 8))
+fig.canvas.manager.set_window_title('Exercício 2 - Modos de Vibração')
+
+x = np.linspace(0, Lx_ad, 101)
+y = np.linspace(0, Ly_ad, 101)
+X, Y = np.meshgrid(x, y)
+
+for i in range(10):
+    ax = fig.add_subplot(2, 5, i+1, projection='3d')
+    Z = Phi_final[:, i].reshape((101, 101))
+    
+    surf = ax.plot_surface(X, Y, Z, cmap='viridis', edgecolor='none', alpha=0.9)
+    ax.set_title(f'Modo {i+1}\nf = {f_final[i]:.1f} Hz')
+    
+    z_limite = np.max(np.abs(Z))
+    ax.set_zlim(-z_limite, z_limite)
+    ax.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+# 3.5.1 Exercício 3 -------------------------------------------------------------------------------
+# Tarefa puramente analítica. Será documentada em LaTeX no relatório final.
+# Lembrete (Regra Rigorosa de Notação): a solução da oscilação livre deve ser descrita
+# obrigatoriamente utilizando a notação sin, resultando na forma \sin(\omega_k t + \phi_k).
+
+
+# 3.5.1 Exercício 4 -------------------------------------------------------------------------------
+# (Placeholder) - Decomposição do termo forçante na base ortogonal de autovetores generalizados.
+
+
+# 3.5.1 Exercício 5 -------------------------------------------------------------------------------
+# (Placeholder) - Cálculo da energia elástica média e plotagem log-log da curva de ressonância.

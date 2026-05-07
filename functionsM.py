@@ -55,6 +55,62 @@ def BuildMatrizes_Eigen(N1, N2, sigma, rho, e, h):
     
     return K, M
 
+# Exercício 1
+def BuildMatrizes_Eigen_Circular(N1, N2, sigma_ad, rho_ad, e_ad, h):
+    """
+    Constrói K e M para a membrana circular adimensionalizada.
+    O domínio físico simulado é um quadrado 2x2.
+    """
+    nunk = N1 * N2
+    
+    # 1. Matriz de Rigidez K (Laplaciano)
+    d0 = 4.0 * np.ones(nunk)
+    d1 = -np.ones(nunk - 1)
+    dN = -np.ones(nunk - N1)
+    
+    # Corte estrutural do wrap-around
+    for i in range(1, N2):
+        d1[i * N1 - 1] = 0
+        
+    K = (sigma_ad / h**2) * sparse.diags(
+        [dN, d1, d0, d1, dN], 
+        [-N1, -1, 0, 1, N1], 
+        format='lil'
+    )
+    
+    # 2. Matriz de Massa M
+    M = rho_ad * e_ad * sparse.identity(nunk, format='csr')
+    
+    # 3. Adimensionalização e Geração da Máscara Circular
+    Lx = 2.0
+    Ly = 2.0
+    R_ad = 1.0
+    xc = 1.0
+    yc = 1.0
+    
+    x = np.linspace(0, Lx, N1)
+    y = np.linspace(0, Ly, N2)
+    
+    big_number = 1e8 # 100 milhões
+    nos_restritos = []
+    
+    # Identificação dos nós exteriores à membrana
+    for i in range(N1):
+        for j in range(N2):
+            dist_quadrada = (x[i] - xc)**2 + (y[j] - yc)**2
+            
+            # Se o nó estiver fora do círculo geométrico ou exatamente na borda
+            if dist_quadrada >= R_ad**2:
+                nos_restritos.append(ij2n(i, j, N1))
+                
+    # Injeção da condição de Dirichlet com penalização pesada
+    for Ic in nos_restritos:
+        K[Ic, :] = 0
+        K[:, Ic] = 0
+        K[Ic, Ic] = big_number
+        
+    return K.tocsr(), M
+
 def PlotaModo(N1, N2, Lx, Ly, phi, modo_idx, omega):
     """
     Plota a superfície 3D de um modo de vibração específico da membrana.
