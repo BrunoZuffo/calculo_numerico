@@ -119,30 +119,36 @@ plt.show()
 # 3.5.1 Exercício 4 -------------------------------------------------------------------------------
 # (Placeholder) - Decomposição do termo forçante na base ortogonal de autovetores generalizados.
 
+# -----------------------------------------------------------------
+# OBTNÇÃO DOS COEFICIENTES ALPHA PARA CADA MODO NATURAL
+# -----------------------------------------------------------------
+
 Nx = 101
 Ny = 101
 
 h = Lx_ad / (Nx - 1)
 
 K, M = BuildMatrizes_Eigen_Circular(
-    Nx, Ny,
+    Nx,
+    Ny,
     sigma_ad,
     rho_ad,
     e_ad,
     h
 )
 
-# modos naturais
-lambdas, Phi = eigsh(K, k=10, M=M, which='SM')
+lambdas, Phi = eigsh(
+    K,
+    k=10,
+    M=M,
+    which='SM'
+)
 
+# ordena os modos
 idx = np.argsort(lambdas)
 
 lambdas = lambdas[idx]
 Phi = Phi[:, idx]
-
-# -----------------------------------------------------------------
-# construção do termo forçante espacial
-# -----------------------------------------------------------------
 
 x = np.linspace(0, Lx_ad, Nx)
 y = np.linspace(0, Ly_ad, Ny)
@@ -151,10 +157,11 @@ X, Y = np.meshgrid(x, y)
 
 Z_grid = (X - 0.5)**2 + (Y - 0.5)**2
 
+# vetor da força
 Z = Z_grid.flatten()
 
 # -----------------------------------------------------------------
-# decomposição modal
+# DECOMPOSIÇÃO MODAL
 # -----------------------------------------------------------------
 
 alpha = DecomposicaoModal(Phi, M, Z)
@@ -167,6 +174,32 @@ for i, a in enumerate(alpha):
     print(f"Modo {i+1:2d}: alpha = {a:.6e}")
 
 print("="*70)
+
+# -----------------------------------------------------------------
+# GRÁFICO DE BARRAS DOS COEFICIENTES MODAIS
+# -----------------------------------------------------------------
+
+modos = np.arange(1, len(alpha)+1)
+
+alpha_abs = np.abs(alpha)
+
+plt.figure(figsize=(10,5))
+
+plt.bar(modos, alpha_abs)
+
+plt.xlabel('Modo')
+
+plt.ylabel(r'$|\alpha_i|$')
+
+plt.title('Módulo dos coeficientes modais')
+
+plt.xticks(modos)
+
+plt.yscale('log')
+
+plt.grid(axis='y')
+
+plt.show()
 
 
 # 3.5.1 Exercício 5 -------------------------------------------------------------------------------
