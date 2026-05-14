@@ -5,7 +5,7 @@ matplotlib.use("TkAgg")
 from scipy.sparse.linalg import eigsh
 
 # Importa a função construtora base
-from functionsM import BuildMatrizes_Eigen_Circular
+from functionsM import BuildMatrizes_Eigen_Circular, DecomposicaoModal
 
 # INÍCIO ----------------------------------------------------------------------------------
 # Parâmetros físicos gerais e fixos do problema (Seção 3.5 do PDF)
@@ -118,6 +118,55 @@ plt.show()
 
 # 3.5.1 Exercício 4 -------------------------------------------------------------------------------
 # (Placeholder) - Decomposição do termo forçante na base ortogonal de autovetores generalizados.
+
+Nx = 101
+Ny = 101
+
+h = Lx_ad / (Nx - 1)
+
+K, M = BuildMatrizes_Eigen_Circular(
+    Nx, Ny,
+    sigma_ad,
+    rho_ad,
+    e_ad,
+    h
+)
+
+# modos naturais
+lambdas, Phi = eigsh(K, k=10, M=M, which='SM')
+
+idx = np.argsort(lambdas)
+
+lambdas = lambdas[idx]
+Phi = Phi[:, idx]
+
+# -----------------------------------------------------------------
+# construção do termo forçante espacial
+# -----------------------------------------------------------------
+
+x = np.linspace(0, Lx_ad, Nx)
+y = np.linspace(0, Ly_ad, Ny)
+
+X, Y = np.meshgrid(x, y)
+
+Z_grid = (X - 0.5)**2 + (Y - 0.5)**2
+
+Z = Z_grid.flatten()
+
+# -----------------------------------------------------------------
+# decomposição modal
+# -----------------------------------------------------------------
+
+alpha = DecomposicaoModal(Phi, M, Z)
+
+print("\n" + "="*70)
+print(f"{'DECOMPOSIÇÃO MODAL DO TERMO FORÇANTE':^70}")
+print("="*70)
+
+for i, a in enumerate(alpha):
+    print(f"Modo {i+1:2d}: alpha = {a:.6e}")
+
+print("="*70)
 
 
 # 3.5.1 Exercício 5 -------------------------------------------------------------------------------

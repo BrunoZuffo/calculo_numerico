@@ -134,3 +134,21 @@ def PlotaModo(N1, N2, Lx, Ly, phi, modo_idx, omega):
     
     plt.tight_layout()
     plt.show()
+
+# Exercício 4
+
+def DecomposicaoModal(Phi, M, Z):
+    
+    nmodes = Phi.shape[1]
+    alpha = np.zeros(nmodes)
+
+    for i in range(nmodes):
+
+        phi_i = Phi[:, i]
+
+        numerador = phi_i.T @ Z
+        denominador = phi_i.T @ (M @ phi_i)
+
+        alpha[i] = numerador / denominador
+
+    return alpha
