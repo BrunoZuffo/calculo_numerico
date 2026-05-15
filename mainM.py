@@ -37,7 +37,7 @@ diag_K = K_ex1.diagonal()
 mask_visual = diag_K.reshape((N2_ex1, N1_ex1))
 
 plt.figure(figsize=(6,6))
-plt.imshow(mask_visual > 1e5, extent=[0, Lx_ad, 0, Ly_ad], origin='lower', cmap='viridis')
+plt.imshow(mask_visual == 1e4, extent=[0, Lx_ad, 0, Ly_ad], origin='lower', cmap='viridis')
 plt.title(f"Validação do Exercício 1: Máscara da Membrana ({N1_ex1}x{N2_ex1})\n(Região Amarela = Pontos Fixos)")
 plt.xlabel(r"$\hat{x}$")
 plt.ylabel(r"$\hat{y}$")
@@ -117,7 +117,6 @@ plt.show()
 
 
 # 3.5.1 Exercício 4 -------------------------------------------------------------------------------
-# (Placeholder) - Decomposição do termo forçante na base ortogonal de autovetores generalizados.
 
 # -----------------------------------------------------------------
 # OBTNÇÃO DOS COEFICIENTES ALPHA PARA CADA MODO NATURAL
@@ -203,7 +202,6 @@ plt.show()
 
 
 # 3.5.1 Exercício 5 -------------------------------------------------------------------------------
-# (Placeholder) - Cálculo da energia elástica média e plotagem log-log da curva de ressonância.
 
 print("\n" + "="*70)
 print(f"{'CÁLCULO DA ENERGIA ELÁSTICA MÉDIA (Curva de Ressonância)':^70}")

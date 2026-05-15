@@ -91,7 +91,7 @@ def BuildMatrizes_Eigen_Circular(N1, N2, sigma_ad, rho_ad, e_ad, h):
     x = np.linspace(0, Lx, N1)
     y = np.linspace(0, Ly, N2)
     
-    big_number = 1e8 # 100 milhões
+    big_number = 1e4
     nos_restritos = []
     
     # Identificação dos nós exteriores à membrana
