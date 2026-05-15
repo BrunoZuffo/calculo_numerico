@@ -112,10 +112,7 @@ plt.tight_layout()
 plt.show()
 
 # 3.5.1 Exercício 3 -------------------------------------------------------------------------------
-# Tarefa puramente analítica. Será documentada em LaTeX no relatório final.
-# Lembrete (Regra Rigorosa de Notação): a solução da oscilação livre deve ser descrita
-# obrigatoriamente utilizando a notação sin, resultando na forma \sin(\omega_k t + \phi_k).
-
+# Exercício puramente analítico. Será documentado em LaTeX no relatório final.
 
 # 3.5.1 Exercício 4 -------------------------------------------------------------------------------
 
