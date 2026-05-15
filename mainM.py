@@ -90,6 +90,7 @@ for Nx, Ny in casos_ex2:
 print("=" * 115)
 
 fig = plt.figure(figsize=(20, 8))
+fig.suptitle(f"Primeiros 10 Modos de Vibração - Malha Refinada {Nx}x{Ny}", fontsize=16)
 fig.canvas.manager.set_window_title('Exercício 2 - Modos de Vibração')
 
 x = np.linspace(0, Lx_ad, 101)
@@ -166,7 +167,7 @@ Z = Z_grid.flatten()
 alpha = DecomposicaoModal(Phi, M, Z)
 
 print("\n" + "="*70)
-print(f"{'DECOMPOSIÇÃO MODAL DO TERMO FORÇANTE':^70}")
+print(f"{'DECOMPOSIÇÃO MODAL DO TERMO FORÇANTE (Malha 101x101)':^70}")
 print("="*70)
 
 for i, a in enumerate(alpha):
@@ -200,11 +201,10 @@ plt.grid(axis='y')
 
 plt.show()
 
-
 # 3.5.1 Exercício 5 -------------------------------------------------------------------------------
 
 print("\n" + "="*70)
-print(f"{'CÁLCULO DA ENERGIA ELÁSTICA MÉDIA (Curva de Ressonância)':^70}")
+print(f"{'CÁLCULO DA ENERGIA ELÁSTICA MÉDIA (Curva de Ressonância - Malha 101x101)':^70}")
 print("="*70)
 
 
