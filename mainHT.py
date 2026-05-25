@@ -1,0 +1,262 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.sparse.linalg import spsolve
+from scipy import sparse
+from scipy.spatial import cKDTree
+
+# Importações dos teus módulos existentes
+from functions import GeraGrafo, AssemblyVectorC, Assembly as AssemblyHidraulico, calc_vazao
+
+# =====================================================================
+# 1. FUNÇÕES DO PROFESSOR (mapea_pontos_prox.py integradas)
+# =====================================================================
+def calcular_distancia_ponto_segmento(p, a, b):
+    ab = b - a
+    ap = p - a
+    ab_2 = np.dot(ab, ab)
+    if ab_2 == 0:
+        return np.linalg.norm(p - a)
+    t = np.dot(ap, ab) / ab_2
+    t = np.clip(t, 0.0, 1.0)
+    ponto_proximo = a + t * ab
+    return np.linalg.norm(p - ponto_proximo)
+
+def CreateMapDistance(Lx, Ly, Nx, Ny, nos_rede, conexoes_rede, d_max):
+    x = np.linspace(0, Lx, Nx)
+    y = np.linspace(0, Ly, Ny)
+    X, Y = np.meshgrid(x, y)
+    pontos_grade = np.column_stack((X.ravel(), Y.ravel()))
+    
+    arvore_grade = cKDTree(pontos_grade)
+    mapa_proximidade = [[] for _ in range(Nx * Ny)]
+    
+    for id_aresta, (idx_i, idx_j) in enumerate(conexoes_rede):
+        p_i = nos_rede[idx_i]
+        p_j = nos_rede[idx_j]
+        
+        ponto_medio = (p_i + p_j) / 2.0
+        comprimento_aresta = np.linalg.norm(p_j - p_i)
+        raio_busca = (comprimento_aresta / 2.0) + d_max
+        
+        indices_candidatos = arvore_grade.query_ball_point(ponto_medio, raio_busca)
+        
+        for idx_ponto in indices_candidatos:
+            ponto = pontos_grade[idx_ponto]
+            dist = calcular_distancia_ponto_segmento(ponto, p_i, p_j)
+            if dist <= d_max:
+                mapa_proximidade[idx_ponto].append((id_aresta, dist))
+                
+    return mapa_proximidade
+
+# =====================================================================
+# 2. FUNÇÕES DE ACOPLAMENTO TÉRMICO E ESTRUTURAÇÃO DA PLACA
+# =====================================================================
+def CriarSistemaSolidoBase(Nx, Ny, Lx, Ly, k_solid, TL, TR, TB, TT, fonte_calor):
+    """Monta a matriz de condução pura do sólido (Diferenças Finitas)"""
+    nunk = Nx * Ny
+    A = np.zeros((nunk, nunk))
+    b = np.zeros(nunk)
+    hx = Lx / (Nx - 1)
+    hy = Ly / (Ny - 1)
+    
+    for i in range(Nx):
+        for j in range(Ny):
+            Ic = i + j * Nx
+            
+            # Condições de contorno de Dirichlet nas bordas da placa
+            if i == 0:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TL
+            elif i == Nx - 1:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TR
+            elif j == 0:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TB[i]
+            elif j == Ny - 1:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TT[i]
+            else:
+                # Nós internos: -k * Laplacian(T) = fonte_calor
+                Ie, Iw = (i + 1) + j * Nx, (i - 1) + j * Nx
+                In, Is = i + (j + 1) * Nx, i + (j - 1) * Nx
+                
+                A[Ic, Ic] = 2 * k_solid / hx**2 + 2 * k_solid / hy**2
+                A[Ic, Ie] = -k_solid / hx**2
+                A[Ic, Iw] = -k_solid / hx**2
+                A[Ic, In] = -k_solid / hy**2
+                A[Ic, Is] = -k_solid / hy**2
+                b[Ic] = fonte_calor
+                
+    return A, b
+
+def CalcularComprimentos(Xno, conec):
+    Nc = len(conec)
+    L_canos = np.zeros(Nc)
+    for k, (n1, n2) in enumerate(conec):
+        dx = Xno[n2, 0] - Xno[n1, 0]
+        dy = Xno[n2, 1] - Xno[n1, 1]
+        L_canos[k] = np.sqrt(dx**2 + dy**2)
+    return L_canos
+
+def ObterTemperaturaSolidoNosCanais(conec, T_solid_flat, mapa_proximidade):
+    """Calcula a temperatura média do sólido que envolve cada canal"""
+    Nc = len(conec)
+    T_s_canais = np.zeros(Nc)
+    contagem_nos_por_canal = np.zeros(Nc)
+    
+    for id_no, arestas_proximas in enumerate(mapa_proximidade):
+        for id_aresta, dist in arestas_proximas:
+            T_s_canais[id_aresta] += T_solid_flat[id_no]
+            contagem_nos_por_canal[id_aresta] += 1
+            
+    for k in range(Nc):
+        if contagem_nos_por_canal[k] > 0:
+            T_s_canais[k] /= contagem_nos_por_canal[k]
+        else:
+            T_s_canais[k] = np.mean(T_solid_flat)
+            
+    return T_s_canais, contagem_nos_por_canal
+
+def AssemblyTermicoFluido(Xno, conec, Q, L_canos, P_canos, T_s_canais, rho, cp, hc, T_inlet, n_inlet):
+    """Monta o sistema térmico para a temperatura do fluido nos canais (Upwind)"""
+    Nv = len(Xno)
+    Af = np.zeros((Nv, Nv))
+    bf = np.zeros(Nv)
+    
+    for k, (n1, n2) in enumerate(conec):
+        qk = Q[k]
+        n_in, n_out = (n1, n2) if qk >= 0 else (n2, n1)
+        abs_qk = abs(qk)
+        Lk = L_canos[k]
+        Pk = P_canos[k]
+        
+        if n_out != n_inlet:
+            Af[n_out, n_out] += rho * cp * abs_qk + hc * Pk * Lk
+            Af[n_out, n_in]  += -rho * cp * abs_qk
+            bf[n_out]        += hc * Pk * Lk * T_s_canais[k]
+            
+    Af[n_inlet, :] = 0.0
+    Af[n_inlet, n_inlet] = 1.0
+    bf[n_inlet] = T_inlet
+    return Af, bf
+
+def ModificarSistemaSolido(A_s_base, b_s_base, conec, Q, Tf, L_canos, P_canos, hc, hx, hy, Nx, Ny, mapa_proximidade, contagem_nos_por_canal):
+    """Adiciona o termo de troca convectiva volumétrica nos nós internos do sólido"""
+    A_s = A_s_base.copy().tolil() if sparse.issparse(A_s_base) else A_s_base.copy()
+    b_s = b_s_base.copy()
+    
+    for id_no, arestas_proximas in enumerate(mapa_proximidade):
+        i = id_no % Nx
+        j = id_no // Nx
+        
+        # Mantém intactas as condições de contorno originais da placa
+        if i == 0 or i == Nx-1 or j == 0 or j == Ny-1:
+            continue
+            
+        for id_aresta, dist in arestas_proximas:
+            qk = Q[id_aresta]
+            n1, n2 = conec[id_aresta]
+            n_in = n1 if qk >= 0 else n2
+            
+            Tf_canal = Tf[n_in]
+            Lk = L_canos[id_aresta]
+            Pk = P_canos[id_aresta]
+            num_nos_mapeados = contagem_nos_por_canal[id_aresta]
+            
+            if num_nos_mapeados > 0:
+                # O calor trocado é distribuído proporcionalmente ao volume da célula (hx * hy)
+                fator_volumetrico = (hc * Pk * Lk) / (num_nos_mapeados * hx * hy)
+                A_s[id_no, id_no] += fator_volumetrico
+                b_s[id_no]        += fator_volumetrico * Tf_canal
+                
+    return A_s.tocsc() if sparse.issparse(A_s) else A_s
+
+# =====================================================================
+# 3. CONFIGURAÇÃO E EXECUÇÃO PRINCIPAL
+# =====================================================================
+if __name__ == "__main__":
+    # Parâmetros Geométricos e Térmicos da Placa
+    Nx, Ny = 51, 26
+    Lx, Ly = 0.02, 0.01  # metros (2cm x 1cm)
+    hx, hy = Lx / (Nx - 1), Ly / (Ny - 1)
+    
+    k_solid = 0.25       
+    rho, cp, hc = 1000.0, 4184.0, 3000.0
+    T_inlet = 20.0
+    TL, TR = 10.0, 30.0
+    fonte_calor = 5.0e5
+
+    # 3.1 Resolução Hidráulica da Rede
+    Xno, conec = GeraGrafo(levels=3)
+    Xno = Xno * 0.001  # Conversão da escala da malha para metros
+    n_inlet, n_outlet = 0, len(Xno) - 1
+
+    # Correção do vetor C para garantir que seja unidimensional puro
+    C = AssemblyVectorC(conec, Xno)
+    C = np.array(C).flatten()  
+
+    A_h = AssemblyHidraulico(conec, C)
+    A_h_tilde = A_h.copy()
+    A_h_tilde[n_outlet, :] = 0.0
+    A_h_tilde[n_outlet, n_outlet] = 1.0
+
+    b_h = np.zeros(len(Xno))
+    b_h[n_inlet] = 1.0e-7  # Vazão imposta na entrada
+
+    pressures = np.linalg.solve(A_h_tilde, b_h)
+    
+    # CORREÇÃO DA ORDEM: conec, C, pressures conforme a assinatura do teu arquivo
+    Q = calc_vazao(conec, C, pressures)  
+
+    L_canos = CalcularComprimentos(Xno, conec)
+    D_canos = np.ones(len(conec)) * 100e-6  # canais com diâmetro de 100 µm
+    P_canos = np.pi * D_canos
+
+    # 3.2 Geração do Mapa de Proximidade (Algoritmo do Professor)
+    d_max = 1.5 * np.sqrt(hx**2 + hy**2) 
+    print(f"Gerando mapa de proximidade via cKDTree (d_max = {d_max:.4e} m)...")
+    mapa_proximidade = CreateMapDistance(Lx, Ly, Nx, Ny, Xno, conec, d_max)
+
+    # 3.3 Construção da Matriz de Condução Base da Placa
+    x_coords = np.linspace(0, Lx, Nx)
+    TB = 10 + 20 * (x_coords / Lx)
+    TT = 10 + 20 * (x_coords / Lx)
+    A_s_base, b_s_base = CriarSistemaSolidoBase(Nx, Ny, Lx, Ly, k_solid, TL, TR, TB, TT, fonte_calor)
+    A_s_base_sparse = sparse.csc_matrix(A_s_base)
+
+    # 3.4 Loop Iterativo de Acoplamento Térmico (Gauss-Seidel entre Sistemas)
+    nunk = Nx * Ny
+    T_solid_flat = np.ones(nunk) * T_inlet 
+    T_fluid = np.ones(len(Xno)) * T_inlet
+    TOL, MAX_ITER = 1e-5, 200
+    erro, iteracao = 1.0, 0
+
+    print("\nIniciando acoplamento térmico...")
+    while erro > TOL and iteracao < MAX_ITER:
+        T_solid_old = T_solid_flat.copy()
+        
+        # Passo A: Fluido vê o sólido através do mapa e calcula suas novas temperaturas
+        T_s_canais, contagem_nos = ObterTemperaturaSolidoNosCanais(conec, T_solid_flat, mapa_proximidade)
+        Af, bf = AssemblyTermicoFluido(Xno, conec, Q, L_canos, P_canos, T_s_canais, rho, cp, hc, T_inlet, n_inlet)
+        T_fluid = np.linalg.solve(Af, bf)
+        
+        # Passo B: Sólido recebe a energia dos canais e calcula sua nova distribuição térmica
+        A_s_mod = ModificarSistemaSolido(A_s_base_sparse, b_s_base, conec, Q, T_fluid, L_canos, P_canos, hc, hx, hy, Nx, Ny, mapa_proximidade, contagem_nos)
+        T_solid_flat = spsolve(A_s_mod, b_s_base)
+        
+        erro = np.max(np.abs(T_solid_flat - T_solid_old))
+        iteracao += 1
+        if iteracao % 5 == 0 or erro <= TOL:
+            print(f"Iteração: {iteracao:<4} | Erro Máximo: {erro:.4e}")
+
+    # 3.5 Visualização do Resultado Final
+    T_placa_2D = T_solid_flat.reshape((Ny, Nx))
+    plt.figure(figsize=(10, 5))
+    plt.contourf(x_coords * 1000, np.linspace(0, Ly, Ny) * 1000, T_placa_2D, levels=50, cmap='jet')
+    plt.colorbar(label='Temperatura (°C)')
+    plt.title('Distribuição Térmica Final na Placa (Com Mapeamento por KD-Tree)')
+    plt.xlabel('X (mm)')
+    plt.ylabel('Y (mm)')
+    plt.tight_layout()
+    plt.show()
