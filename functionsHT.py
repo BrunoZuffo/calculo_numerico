@@ -1,6 +1,9 @@
 import numpy as np
 from scipy import sparse
 from scipy.spatial import cKDTree
+import matplotlib.pyplot as plt
+import time
+from matplotlib.collections import LineCollection
 
 # =====================================================================
 # FUNÇÕES DO PROFESSOR (mapea_pontos_prox.py)
@@ -133,3 +136,199 @@ def ModificarSistemaSolido(A_s_base, b_s_base, conec, Q, Tf, L_canos, P_canos, h
                 b_s[id_no]        += fator_area * Tf_canal
                 
     return A_s.tocsc() if sparse.issparse(A_s) else A_s
+
+def calcular_temperatura_media_arestas(conec, Xno, T_fluid_nodes, num_subintervalos=1000):
+    """
+    Calcula a temperatura média em cada aresta (canal) da rede hidráulica
+    empregando a Regra do Trapézio (Simples ou Composta).
+    """
+    t_inicio = time.perf_counter()
+    nc = len(conec)
+    T_arestas = np.zeros(nc)
+    
+    # Pontos de amostragem adimensionais ao longo do canal (de 0 a 1)
+    t = np.linspace(0, 1, num_subintervalos + 1)
+    dt = 1.0 / num_subintervalos
+    
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+        
+        # Temperatura nas extremidades do canal k (valores conhecidos nos nós)
+        T1 = T_fluid_nodes[n1]
+        T2 = T_fluid_nodes[n2]
+        
+        # Interpolação linear da temperatura do fluido ao longo do canal nos pontos de quadratura
+        T_amostras = T1 + t * (T2 - T1)
+        
+        # Aplicação da Regra do Trapézio
+        integral = (T_amostras[0] + T_amostras[-1]) / 2.0
+        if num_subintervalos > 1:
+            integral += np.sum(T_amostras[1:-1])
+        integral *= dt
+        
+        T_arestas[k] = integral
+        
+    t_fim = time.perf_counter()
+    tempo_execucao = t_fim - t_inicio
+    
+    return T_arestas, tempo_execucao
+
+
+def plot_arestas_cromaticas_hidraulics(conec, Xno, T_nodes, T_arestas, titulo="Rede Hidráulica"):
+    """
+    Plota o grafo da rede hidráulica mapeando os valores obtidos de temperatura média 
+    em uma escala cromática aplicada diretamente sobre as arestas.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Construção dos segmentos de reta para o LineCollection
+    segmentos = []
+    for k in range(len(conec)):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+        segmentos.append((Xno[n1], Xno[n2]))
+
+    # Normalização de cores baseada nos limites térmicos dos nós do fluido
+    norm = plt.Normalize(vmin=T_nodes.min(), vmax=T_nodes.max())
+    
+    # Plotagem das arestas coloridas pela temperatura média obtida na quadratura
+    lc = LineCollection(segmentos, cmap='jet', norm=norm, linewidths=2.5, zorder=1)
+    lc.set_array(T_arestas)
+    ax.add_collection(lc)
+
+    # Plotagem dos nós coloridos pela temperatura pontual do fluido
+    sc = ax.scatter(
+        Xno[:, 0], Xno[:, 1],
+        c=T_nodes,
+        cmap='jet',
+        norm=norm,
+        s=30,
+        zorder=2,
+        edgecolors='black',
+        linewidths=0.5
+    )
+    
+    # Barra de cores lateral e configurações dos eixos
+    cbar = fig.colorbar(lc, ax=ax)
+    cbar.set_label('Temperatura (°C)', fontsize=11)
+    
+    ax.set_title(titulo, fontsize=12, fontweight='bold')
+    ax.set_xlabel('Posição X (m)', fontsize=10)
+    ax.set_ylabel('Posição Y (m)', fontsize=10)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+
+def CalcularK_Face(pts_face, nos_rede, conexoes_rede, d_max, k0):
+    """
+    Identifica as arestas da rede próximas a cada ponto médio de interface
+    e calcula a condutividade perturbada k_f.
+    """
+    arvore = cKDTree(pts_face)
+    k_face = np.ones(len(pts_face)) * k0
+    mapa_prox = [[] for _ in range(len(pts_face))]
+    
+    for id_aresta, (idx_i, idx_j) in enumerate(conexoes_rede):
+        p_i = nos_rede[idx_i]
+        p_j = nos_rede[idx_j]
+        ponto_medio = (p_i + p_j) / 2.0
+        comp = np.linalg.norm(p_j - p_i)
+        raio = (comp / 2.0) + d_max
+        
+        # Otimiza a busca encontrando apenas pontos potencialmente próximos
+        candidatos = arvore.query_ball_point(ponto_medio, raio)
+        for idx_pt in candidatos:
+            # Calcula a distância exata ao segmento do canal
+            dist = calcular_distancia_ponto_segmento(pts_face[idx_pt], p_i, p_j)
+            if dist <= d_max:
+                mapa_prox[idx_pt].append(dist)
+                
+    for i, dists in enumerate(mapa_prox):
+        if dists:
+            # Fórmula: k_f = k_0 * (1 + sum(1 / (1 + d_j)))
+            soma = sum(1.0 / (1.0 + d) for d in dists)
+            k_face[i] = k0 * (1.0 + soma)
+            
+    return k_face
+
+def ObterCondutividadeFaces(Nx, Ny, Lx, Ly, nos_rede, conexoes_rede, d_max, k0):
+    """
+    Gera as matrizes 2D de condutividade para as faces leste (k_e) e norte (k_n).
+    """
+    hx = Lx / (Nx - 1)
+    hy = Ly / (Ny - 1)
+
+    # Faces Leste: pontos médios entre i e i+1
+    x_e = np.linspace(hx/2, Lx - hx/2, Nx - 1)
+    y_e = np.linspace(0, Ly, Ny)
+    X_e, Y_e = np.meshgrid(x_e, y_e, indexing='ij')
+    pts_e = np.column_stack((X_e.ravel(), Y_e.ravel()))
+    k_e_flat = CalcularK_Face(pts_e, nos_rede, conexoes_rede, d_max, k0)
+    k_e = k_e_flat.reshape((Nx - 1, Ny))
+
+    # Faces Norte: pontos médios entre j e j+1
+    x_n = np.linspace(0, Lx, Nx)
+    y_n = np.linspace(hy/2, Ly - hy/2, Ny - 1)
+    X_n, Y_n = np.meshgrid(x_n, y_n, indexing='ij')
+    pts_n = np.column_stack((X_n.ravel(), Y_n.ravel()))
+    k_n_flat = CalcularK_Face(pts_n, nos_rede, conexoes_rede, d_max, k0)
+    k_n = k_n_flat.reshape((Nx, Ny - 1))
+
+    return k_e, k_n
+
+def CriarSistemaSolidoCondutividadeVariavel(Nx, Ny, Lx, Ly, k_e, k_n, TL, TR, TB, TT, fonte_calor, R_incl, xincl, yincl, TC):
+    """
+    Monta a matriz do sistema de condução térmica usando k variável nas faces.
+    Inclui uma máscara circular onde a temperatura é fixada em TC.
+    """
+    nunk = Nx * Ny
+    A = np.zeros((nunk, nunk))
+    b = np.zeros(nunk)
+    hx = Lx / (Nx - 1)
+    hy = Ly / (Ny - 1)
+    
+    x_coords = np.linspace(0, Lx, Nx)
+    y_coords = np.linspace(0, Ly, Ny)
+    
+    for i in range(Nx):
+        for j in range(Ny):
+            Ic = i + j * Nx
+            xc, yc = x_coords[i], y_coords[j]
+            
+            # Máscara para a inclusão circular
+            if (xc - xincl)**2 + (yc - yincl)**2 <= R_incl**2:
+                A[Ic, Ic] = 1.0
+                b[Ic] = TC
+                continue
+                
+            # Condições de contorno de Dirichlet nas bordas da placa
+            if i == 0:
+                A[Ic, Ic] = 1.0; b[Ic] = TL
+            elif i == Nx - 1:
+                A[Ic, Ic] = 1.0; b[Ic] = TR
+            elif j == 0:
+                A[Ic, Ic] = 1.0; b[Ic] = TB[i]
+            elif j == Ny - 1:
+                A[Ic, Ic] = 1.0; b[Ic] = TT[i]
+            else:
+                Ie = (i + 1) + j * Nx
+                Iw = (i - 1) + j * Nx
+                In = i + (j + 1) * Nx
+                Is = i + (j - 1) * Nx
+                
+                # Valores de k nas interfaces da célula (i,j)
+                ke = k_e[i, j]      
+                kw = k_e[i-1, j]    
+                kn = k_n[i, j]      
+                ks = k_n[i, j-1]    
+                
+                # Conservação de calor - Diferenças Finitas 2D
+                A[Ic, Ic] = (ke + kw) / hx**2 + (kn + ks) / hy**2
+                A[Ic, Ie] = -ke / hx**2
+                A[Ic, Iw] = -kw / hx**2
+                A[Ic, In] = -kn / hy**2
+                A[Ic, Is] = -ks / hy**2
+                b[Ic] = fonte_calor
+                
+    return A, b
