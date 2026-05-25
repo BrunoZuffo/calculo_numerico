@@ -1,6 +1,9 @@
 import numpy as np
 from scipy import sparse
 from scipy.spatial import cKDTree
+import matplotlib.pyplot as plt
+import time
+from matplotlib.collections import LineCollection
 
 # =====================================================================
 # FUNÇÕES DO PROFESSOR (mapea_pontos_prox.py)
@@ -133,3 +136,84 @@ def ModificarSistemaSolido(A_s_base, b_s_base, conec, Q, Tf, L_canos, P_canos, h
                 b_s[id_no]        += fator_area * Tf_canal
                 
     return A_s.tocsc() if sparse.issparse(A_s) else A_s
+
+def calcular_temperatura_media_arestas(conec, Xno, T_fluid_nodes, num_subintervalos=1000):
+    """
+    Calcula a temperatura média em cada aresta (canal) da rede hidráulica
+    empregando a Regra do Trapézio (Simples ou Composta).
+    """
+    t_inicio = time.perf_counter()
+    nc = len(conec)
+    T_arestas = np.zeros(nc)
+    
+    # Pontos de amostragem adimensionais ao longo do canal (de 0 a 1)
+    t = np.linspace(0, 1, num_subintervalos + 1)
+    dt = 1.0 / num_subintervalos
+    
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+        
+        # Temperatura nas extremidades do canal k (valores conhecidos nos nós)
+        T1 = T_fluid_nodes[n1]
+        T2 = T_fluid_nodes[n2]
+        
+        # Interpolação linear da temperatura do fluido ao longo do canal nos pontos de quadratura
+        T_amostras = T1 + t * (T2 - T1)
+        
+        # Aplicação da Regra do Trapézio
+        integral = (T_amostras[0] + T_amostras[-1]) / 2.0
+        if num_subintervalos > 1:
+            integral += np.sum(T_amostras[1:-1])
+        integral *= dt
+        
+        T_arestas[k] = integral
+        
+    t_fim = time.perf_counter()
+    tempo_execucao = t_fim - t_inicio
+    
+    return T_arestas, tempo_execucao
+
+
+def plot_arestas_cromaticas_hidraulics(conec, Xno, T_nodes, T_arestas, titulo="Rede Hidráulica"):
+    """
+    Plota o grafo da rede hidráulica mapeando os valores obtidos de temperatura média 
+    em uma escala cromática aplicada diretamente sobre as arestas.
+    """
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Construção dos segmentos de reta para o LineCollection
+    segmentos = []
+    for k in range(len(conec)):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+        segmentos.append((Xno[n1], Xno[n2]))
+
+    # Normalização de cores baseada nos limites térmicos dos nós do fluido
+    norm = plt.Normalize(vmin=T_nodes.min(), vmax=T_nodes.max())
+    
+    # Plotagem das arestas coloridas pela temperatura média obtida na quadratura
+    lc = LineCollection(segmentos, cmap='jet', norm=norm, linewidths=2.5, zorder=1)
+    lc.set_array(T_arestas)
+    ax.add_collection(lc)
+
+    # Plotagem dos nós coloridos pela temperatura pontual do fluido
+    sc = ax.scatter(
+        Xno[:, 0], Xno[:, 1],
+        c=T_nodes,
+        cmap='jet',
+        norm=norm,
+        s=30,
+        zorder=2,
+        edgecolors='black',
+        linewidths=0.5
+    )
+    
+    # Barra de cores lateral e configurações dos eixos
+    cbar = fig.colorbar(lc, ax=ax)
+    cbar.set_label('Temperatura (°C)', fontsize=11)
+    
+    ax.set_title(titulo, fontsize=12, fontweight='bold')
+    ax.set_xlabel('Posição X (m)', fontsize=10)
+    ax.set_ylabel('Posição Y (m)', fontsize=10)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.show()

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 from scipy import sparse
 from scipy.spatial import cKDTree
+from functionsHT import calcular_temperatura_media_arestas, plot_arestas_cromaticas_hidraulics
 
 # Importações dos teus módulos existentes
 from functions import GeraGrafo, AssemblyVectorC, Assembly as AssemblyHidraulico, calc_vazao
@@ -260,3 +261,27 @@ if __name__ == "__main__":
     plt.ylabel('Y (mm)')
     plt.tight_layout()
     plt.show()
+
+# Supondo que 'conec', 'Xno' e 'T_fluid' (temperatura nos nós do fluido) já existam no seu main...
+cenarios = [1, 10, 100, 1000]
+resultados_T = {}
+
+print("\n--- ANÁLISE DE CONVERGÊNCIA DE QUADRATURA (CAP 4, EX 3) ---")
+for N in cenarios:
+    T_medias, tempo = calcular_temperatura_media_arestas(conec, Xno, T_fluid, num_subintervalos=N)
+    resultados_T[N] = T_medias
+    print(f"Subintervalos: {N:<4} | Tempo: {tempo:.6f} s | Média Global: {np.mean(T_medias):.4f} °C")
+
+# Estratégia matemática para estimativa do erro (Critério de Cauchy contra N=1000)
+print("\n--- ESTIMATIVA DE ERRO ABSOLUTO MÉDIO ---")
+for N in [1, 10, 100]:
+    erro_estimado = np.mean(np.abs(resultados_T[N] - resultados_T[1000]))
+    print(f"Configuração N={N:<3} -> Erro Médio Estimado: {erro_estimado:.6e} °C")
+
+# Plota o resultado cromático final para a melhor configuração (N=1000)
+plot_arestas_cromaticas_hidraulics(
+    conec, Xno, 
+    T_nodes=T_fluid, 
+    T_arestas=resultados_T[1000], 
+    titulo="Temperatura Média nas Arestas (Trapézio Composto N=1000)"
+)
