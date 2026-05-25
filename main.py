@@ -106,6 +106,7 @@ plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle=':', alpha=0.7)
 plt.legend(loc="upper right")
+plt.savefig('fig_superposicao.pdf', format='pdf', bbox_inches='tight')
 plt.show()
 
 # D: Item 6
@@ -136,6 +137,7 @@ plt.title("Efeito do Aquecimento na Pressão Máxima (Item 6 - Otimizado)")
 plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle='--', alpha=0.7)
+plt.savefig('fig_aquecimento.pdf', format='pdf', bbox_inches='tight')
 plt.show()
 
 # E: Item 7
@@ -191,6 +193,6 @@ for level in [1,2,3,4]:
 # RESULTADOS E PLOTS
 
 #Rede Hidráulica
-fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m)
+fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m, save_path='fig_rede_hidraulica.png')
 
 plt.show()
