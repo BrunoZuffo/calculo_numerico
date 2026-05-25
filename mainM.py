@@ -5,7 +5,7 @@ matplotlib.use("TkAgg")
 from scipy.sparse.linalg import eigsh
 
 # Importa a função construtora base
-from functionsM import BuildMatrizes_Eigen_Circular
+from functionsM import BuildMatrizes_Eigen_Circular, DecomposicaoModal
 
 # INÍCIO ----------------------------------------------------------------------------------
 # Parâmetros físicos gerais e fixos do problema (Seção 3.5 do PDF)
@@ -37,7 +37,7 @@ diag_K = K_ex1.diagonal()
 mask_visual = diag_K.reshape((N2_ex1, N1_ex1))
 
 plt.figure(figsize=(6,6))
-plt.imshow(mask_visual > 1e5, extent=[0, Lx_ad, 0, Ly_ad], origin='lower', cmap='viridis')
+plt.imshow(mask_visual == 1e4, extent=[0, Lx_ad, 0, Ly_ad], origin='lower', cmap='viridis')
 plt.title(f"Validação do Exercício 1: Máscara da Membrana ({N1_ex1}x{N2_ex1})\n(Região Amarela = Pontos Fixos)")
 plt.xlabel(r"$\hat{x}$")
 plt.ylabel(r"$\hat{y}$")
@@ -90,6 +90,7 @@ for Nx, Ny in casos_ex2:
 print("=" * 115)
 
 fig = plt.figure(figsize=(20, 8))
+fig.suptitle(f"Primeiros 10 Modos de Vibração - Malha Refinada {Nx}x{Ny}", fontsize=16)
 fig.canvas.manager.set_window_title('Exercício 2 - Modos de Vibração')
 
 x = np.linspace(0, Lx_ad, 101)
@@ -111,14 +112,143 @@ plt.tight_layout()
 plt.show()
 
 # 3.5.1 Exercício 3 -------------------------------------------------------------------------------
-# Tarefa puramente analítica. Será documentada em LaTeX no relatório final.
-# Lembrete (Regra Rigorosa de Notação): a solução da oscilação livre deve ser descrita
-# obrigatoriamente utilizando a notação sin, resultando na forma \sin(\omega_k t + \phi_k).
-
+# Exercício puramente analítico. Será documentado em LaTeX no relatório final.
 
 # 3.5.1 Exercício 4 -------------------------------------------------------------------------------
-# (Placeholder) - Decomposição do termo forçante na base ortogonal de autovetores generalizados.
 
+# -----------------------------------------------------------------
+# OBTNÇÃO DOS COEFICIENTES ALPHA PARA CADA MODO NATURAL
+# -----------------------------------------------------------------
+
+Nx = 101
+Ny = 101
+
+h = Lx_ad / (Nx - 1)
+
+K, M = BuildMatrizes_Eigen_Circular(
+    Nx,
+    Ny,
+    sigma_ad,
+    rho_ad,
+    e_ad,
+    h
+)
+
+lambdas, Phi = eigsh(
+    K,
+    k=10,
+    M=M,
+    which='SM'
+)
+
+# ordena os modos
+idx = np.argsort(lambdas)
+
+lambdas = lambdas[idx]
+Phi = Phi[:, idx]
+
+x = np.linspace(0, Lx_ad, Nx)
+y = np.linspace(0, Ly_ad, Ny)
+
+X, Y = np.meshgrid(x, y)
+
+Z_grid = (X - 0.5)**2 + (Y - 0.5)**2
+
+# vetor da força
+Z = Z_grid.flatten()
+
+# -----------------------------------------------------------------
+# DECOMPOSIÇÃO MODAL
+# -----------------------------------------------------------------
+
+alpha = DecomposicaoModal(Phi, M, Z)
+
+print("\n" + "="*70)
+print(f"{'DECOMPOSIÇÃO MODAL DO TERMO FORÇANTE (Malha 101x101)':^70}")
+print("="*70)
+
+for i, a in enumerate(alpha):
+    print(f"Modo {i+1:2d}: alpha = {a:.6e}")
+
+print("="*70)
+
+# -----------------------------------------------------------------
+# GRÁFICO DE BARRAS DOS COEFICIENTES MODAIS
+# -----------------------------------------------------------------
+
+modos = np.arange(1, len(alpha)+1)
+
+alpha_abs = np.abs(alpha)
+
+plt.figure(figsize=(10,5))
+
+plt.bar(modos, alpha_abs)
+
+plt.xlabel('Modo')
+
+plt.ylabel(r'$|\alpha_i|$')
+
+plt.title('Módulo dos coeficientes modais')
+
+plt.xticks(modos)
+
+plt.yscale('log')
+
+plt.grid(axis='y')
+
+plt.show()
 
 # 3.5.1 Exercício 5 -------------------------------------------------------------------------------
-# (Placeholder) - Cálculo da energia elástica média e plotagem log-log da curva de ressonância.
+
+print("\n" + "="*70)
+print(f"{'CÁLCULO DA ENERGIA ELÁSTICA MÉDIA (Curva de Ressonância - Malha 101x101)':^70}")
+print("="*70)
+
+
+
+num_modos_ex5 = 200
+lambdas_ex5, Phi_ex5 = eigsh(K, k=num_modos_ex5, M=M, which='SM')
+
+idx_ex5 = np.argsort(lambdas_ex5)
+lambdas_ex5 = lambdas_ex5[idx_ex5]
+Phi_ex5 = Phi_ex5[:, idx_ex5]
+
+# Frequências naturais para este bloco
+omega_i_ex5 = np.sqrt(np.abs(lambdas_ex5))
+
+
+
+alpha_ex5 = DecomposicaoModal(Phi_ex5, M, Z)
+
+# Definindo o vetor de frequências de excitação (escala logarítmica de 0.5 a 100)
+omega_star = np.logspace(np.log10(0.5), np.log10(100), 2000)
+
+# Valores de amortecimento solicitados no exercício
+betas = [0.01, 0.1, 1.0]
+
+plt.figure(figsize=(10, 6))
+
+for beta in betas:
+    Ae = np.zeros_like(omega_star)
+    
+    for k_idx, w_star in enumerate(omega_star):
+        # Calculando os coeficientes c_i para a frequência w_star atual
+        denominador = np.sqrt((-w_star**2 + omega_i_ex5**2)**2 + (beta * w_star)**2)
+        c_i = alpha_ex5 / denominador
+        
+        # Calculando a energia elástica média
+        Ae[k_idx] = 0.25 * np.sum((c_i**2) * (omega_i_ex5**2))
+        
+    # Plotando a curva para o beta atual
+    plt.loglog(omega_star, Ae, label=f'$\\beta$ = {beta}')
+
+# Configurações do gráfico para replicar a Figura do PDF
+plt.xlabel('Frequência do Termo Forçante ($\\hat{\\omega}_*$)')
+plt.ylabel('Energia Média ($A_e$)')
+plt.title('Energia Elástica Média da Membrana vs Frequência (Adimensional)')
+plt.legend()
+plt.grid(True, which="both", ls="--", alpha=0.4)
+plt.xlim(0.5, 100)
+plt.ylim(bottom=1e-1) 
+plt.tight_layout()
+plt.show()
