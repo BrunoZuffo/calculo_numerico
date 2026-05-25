@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 from scipy.sparse.linalg import spsolve
 from scipy import sparse
 from scipy.spatial import cKDTree
-from functionsHT import calcular_temperatura_media_arestas, plot_arestas_cromaticas_hidraulics
+import time
+from functionsHT import calcular_temperatura_media_arestas, plot_arestas_cromaticas_hidraulics, CalcularK_Face, ObterCondutividadeFaces, CriarSistemaSolidoCondutividadeVariavel
 
 # Importações dos teus módulos existentes
 from functions import GeraGrafo, AssemblyVectorC, Assembly as AssemblyHidraulico, calc_vazao
@@ -285,3 +286,84 @@ plot_arestas_cromaticas_hidraulics(
     T_arestas=resultados_T[1000], 
     titulo="Temperatura Média nas Arestas (Trapézio Composto N=1000)"
 )
+
+# EXERCICIO 1 PARTE 2
+
+print("\n" + "="*50)
+print("INICIANDO EXERCÍCIO 1: ANÁLISE PARAMÉTRICA DE D_MAX E MALHAS")
+print("="*50)
+# Parâmetros atualizados da Seção 4.1
+Lx, Ly = 0.03, 0.015         # 3cm x 1.5cm
+k_0 = 0.25                   
+fonte_calor = 5.0e5          
+TL, TR = 10.0, 30.0
+R_incl = 0.0025              # Raio de 0.25 cm
+xincl, yincl = 0.02 + R_incl, 0.0075  # Centro em (2+R, 0.75) cm
+TC = 35.0                    # Temperatura do círculo
+# Cenários exigidos
+lista_malhas = [(61, 31), (121, 61), (241, 121)]
+lista_dmax = [0.00025, 0.0005, 0.001]
+# Obtenção da Rede (assumimos que foi gerada na Seção 3.1 com levels=3)
+# Reescale a rede se necessário para o novo Lx, Ly da placa
+Xno, conec = GeraGrafo(levels=3)
+Xno = Xno * 0.001
+Xno[:,1] += 0.5 * Ly  # Centralizar em Y se necessário (depende da sua rede)
+for (Nx, Ny) in lista_malhas:
+    for d_max_val in lista_dmax:
+        print(f"\n-> Analisando Malha ({Nx}x{Ny}) com d_max = {d_max_val}")
+        t_inicio = time.time()
+        
+        # Borda Superior e Inferior dinâmicas: T = 10 + 20*(x/Lx)
+        x_coords = np.linspace(0, Lx, Nx)
+        y_coords = np.linspace(0, Ly, Ny)
+        TB = 10.0 + 20.0 * (x_coords / Lx)
+        TT = 10.0 + 20.0 * (x_coords / Lx)
+        # Etapa 1: Calcula o campo de condutividade nas faces
+        t0 = time.time()
+        k_e, k_n = ObterCondutividadeFaces(Nx, Ny, Lx, Ly, Xno, conec, d_max_val, k_0)
+        t_k = time.time() - t0
+        # Etapa 2: Montagem do sistema
+        t0 = time.time()
+        A_s, b_s = CriarSistemaSolidoCondutividadeVariavel(Nx, Ny, Lx, Ly, k_e, k_n, TL, TR, TB, TT, fonte_calor, R_incl, xincl, yincl, TC)
+        A_s_sparse = sparse.csr_matrix(A_s)
+        t_assembly = time.time() - t0
+        # Etapa 3: Resolução do sistema
+        t0 = time.time()
+        T_solid_flat = spsolve(A_s_sparse, b_s)
+        t_solve = time.time() - t0
+        
+        t_total = time.time() - t_inicio
+        T_max = np.max(T_solid_flat)
+        T_placa_2D = T_solid_flat.reshape((Ny, Nx))
+        print(f"   [Tempo] Calc k_faces: {t_k:.3f}s | Assembly: {t_assembly:.3f}s | Solve: {t_solve:.3f}s | Total: {t_total:.3f}s")
+        print(f"   [Resultado] Temperatura Máxima na Placa: {T_max:.2f} °C")
+        # --- GERAÇÃO DOS GRÁFICOS ---
+        fig = plt.figure(figsize=(15, 4))
+        
+        # 1. Mapa de contornos 2D
+        ax1 = plt.subplot(1, 3, 1)
+        cf = ax1.contourf(x_coords * 1000, y_coords * 1000, T_placa_2D, levels=50, cmap='jet')
+        plt.colorbar(cf, ax=ax1, label='T (°C)')
+        ax1.set_title(f'Mapa 2D ($d_{{max}}$={d_max_val})')
+        ax1.set_xlabel('X (mm)')
+        ax1.set_ylabel('Y (mm)')
+        # 2. Perfil Horizontal (Eixo Central em y = Ly/2)
+        ax2 = plt.subplot(1, 3, 2)
+        idx_y_mid = Ny // 2
+        ax2.plot(x_coords * 1000, T_placa_2D[idx_y_mid, :], 'r-', label=f'Y = {y_coords[idx_y_mid]*1000:.1f} mm')
+        ax2.set_title('Perfil Horizontal')
+        ax2.set_xlabel('X (mm)')
+        ax2.set_ylabel('T (°C)')
+        ax2.grid(True)
+        ax2.legend()
+        # 3. Perfil Vertical (Eixo Central em x = Lx/2)
+        ax3 = plt.subplot(1, 3, 3)
+        idx_x_mid = Nx // 2
+        ax3.plot(y_coords * 1000, T_placa_2D[:, idx_x_mid], 'b-', label=f'X = {x_coords[idx_x_mid]*1000:.1f} mm')
+        ax3.set_title('Perfil Vertical')
+        ax3.set_xlabel('Y (mm)')
+        ax3.set_ylabel('T (°C)')
+        ax3.grid(True)
+        ax3.legend()
+        plt.tight_layout()
+        plt.show()
