@@ -296,9 +296,9 @@ import matplotlib.pyplot as plt
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 
-# Importações das suas funções locais (certifique-se de que os nomes estão corretos)
+
 from functionsHT import ObterCondutividadeFaces, CriarSistemaSolidoCondutividadeVariavel
-# from SUA_BIBLIOTECA import GeraGrafo # Descomente/ajuste de onde vem a função GeraGrafo
+ from SUA_BIBLIOTECA import GeraGrafo 
 
 print("\n" + "="*50)
 print("INICIANDO EXERCÍCIO 1: ANÁLISE PARAMÉTRICA DE D_MAX E MALHAS")
