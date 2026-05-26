@@ -332,3 +332,251 @@ def CriarSistemaSolidoCondutividadeVariavel(Nx, Ny, Lx, Ly, k_e, k_n, TL, TR, TB
                 b[Ic] = fonte_calor
                 
     return A, b
+
+# =====================================================================
+# EXERCÍCIO 4 - CAPÍTULO 4
+# Temperatura média nas arestas -> viscosidade -> condutância hidráulica
+# =====================================================================
+
+from scipy.interpolate import RegularGridInterpolator
+
+
+def viscosidade_agua_T(T):
+    """
+    Viscosidade dinâmica da água em função da temperatura T em °C.
+    Retorna mu em Pa.s.
+    """
+    T = np.asarray(T)
+    return 0.001791 / (1.0 + 0.03368*T + 0.000221*T**2)
+
+
+def criar_interpolador_temperatura(T_flat, Nx, Ny, Lx, Ly, metodo="linear"):
+    """
+    Cria interpolador bidimensional para o campo de temperaturas da placa.
+
+    No projeto, o índice global é:
+        I = i + j*Nx
+
+    Por isso:
+        T_flat.reshape((Ny, Nx)).T
+    gera uma matriz no formato (Nx, Ny), compatível com (x, y).
+    """
+    x = np.linspace(0.0, Lx, Nx)
+    y = np.linspace(0.0, Ly, Ny)
+
+    T_matriz = np.array(T_flat).reshape((Ny, Nx)).T
+
+    interpolador = RegularGridInterpolator(
+        (x, y),
+        T_matriz,
+        method=metodo,
+        bounds_error=False,
+        fill_value=None
+    )
+
+    return interpolador, T_matriz
+
+
+def calcular_temperatura_media_arestas_campo(
+    conec,
+    Xno,
+    interpolador_T,
+    metodo="trapezio",
+    num_subintervalos=10
+):
+    """
+    Calcula a temperatura média de cada aresta da rede hidráulica
+    usando o campo térmico da placa.
+
+    metodo:
+        "trapezio"
+        "ponto_medio"
+    """
+    t_inicio = time.perf_counter()
+
+    nc = len(conec)
+    T_arestas = np.zeros(nc)
+
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+
+        p1 = Xno[n1]
+        p2 = Xno[n2]
+
+        if metodo == "ponto_medio":
+            valores = []
+
+            for m in range(num_subintervalos):
+                alpha = (m + 0.5) / num_subintervalos
+                ponto = p1 + alpha * (p2 - p1)
+                valores.append(interpolador_T([ponto])[0])
+
+            T_arestas[k] = np.mean(valores)
+
+        elif metodo == "trapezio":
+            alphas = np.linspace(0.0, 1.0, num_subintervalos + 1)
+            valores = []
+
+            for alpha in alphas:
+                ponto = p1 + alpha * (p2 - p1)
+                valores.append(interpolador_T([ponto])[0])
+
+            valores = np.array(valores)
+
+            media_integral = valores[0]/2.0 + np.sum(valores[1:-1]) + valores[-1]/2.0
+            media_integral = media_integral / num_subintervalos
+
+            T_arestas[k] = media_integral
+
+        else:
+            raise ValueError("metodo deve ser 'trapezio' ou 'ponto_medio'.")
+
+    tempo = time.perf_counter() - t_inicio
+
+    return T_arestas, tempo
+
+
+def calcular_condutancias_por_temperatura(conec, Xno, T_arestas, area_canal=2.5e-7):
+    """
+    Calcula a condutância hidráulica de cada canal usando a temperatura média
+    da própria aresta.
+    """
+    nc = len(conec)
+    C = np.zeros(nc)
+
+    D = np.sqrt(4.0 * area_canal / np.pi)
+
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+
+        p1 = Xno[n1]
+        p2 = Xno[n2]
+
+        Lk = np.linalg.norm(p2 - p1)
+        mu_k = viscosidade_agua_T(T_arestas[k])
+
+        kappa_k = np.pi * D**4 / (128.0 * mu_k)
+        C[k] = kappa_k / Lk
+
+    return C
+
+# =====================================================================
+# EXERC?CIO 4 - CAP?TULO 4
+# Temperatura m?dia nas arestas -> viscosidade -> condut?ncia hidr?ulica
+# =====================================================================
+
+from scipy.interpolate import RegularGridInterpolator
+
+
+def viscosidade_agua_T(T):
+    """
+    Viscosidade din?mica da ?gua em fun??o da temperatura T em ?C.
+    Retorna mu em Pa.s.
+    """
+    T = np.asarray(T)
+    return 0.001791 / (1.0 + 0.03368*T + 0.000221*T**2)
+
+
+def criar_interpolador_temperatura(T_flat, Nx, Ny, Lx, Ly, metodo="linear"):
+    """
+    Cria interpolador bidimensional para o campo de temperaturas da placa.
+    O ?ndice global usado no projeto ? I = i + j*Nx.
+    """
+    x = np.linspace(0.0, Lx, Nx)
+    y = np.linspace(0.0, Ly, Ny)
+
+    T_matriz = np.array(T_flat).reshape((Ny, Nx)).T
+
+    interpolador = RegularGridInterpolator(
+        (x, y),
+        T_matriz,
+        method=metodo,
+        bounds_error=False,
+        fill_value=None
+    )
+
+    return interpolador, T_matriz
+
+
+def calcular_temperatura_media_arestas_campo(
+    conec,
+    Xno,
+    interpolador_T,
+    metodo="trapezio",
+    num_subintervalos=10
+):
+    """
+    Calcula a temperatura m?dia de cada aresta da rede hidr?ulica
+    usando o campo t?rmico da placa.
+
+    metodo:
+        "trapezio"
+        "ponto_medio"
+    """
+    t_inicio = time.perf_counter()
+
+    nc = len(conec)
+    T_arestas = np.zeros(nc)
+
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+
+        p1 = Xno[n1]
+        p2 = Xno[n2]
+
+        if metodo == "ponto_medio":
+            valores = []
+
+            for m in range(num_subintervalos):
+                alpha = (m + 0.5) / num_subintervalos
+                ponto = p1 + alpha * (p2 - p1)
+                valores.append(interpolador_T([ponto])[0])
+
+            T_arestas[k] = np.mean(valores)
+
+        elif metodo == "trapezio":
+            alphas = np.linspace(0.0, 1.0, num_subintervalos + 1)
+            valores = []
+
+            for alpha in alphas:
+                ponto = p1 + alpha * (p2 - p1)
+                valores.append(interpolador_T([ponto])[0])
+
+            valores = np.array(valores)
+
+            media_integral = valores[0]/2.0 + np.sum(valores[1:-1]) + valores[-1]/2.0
+            media_integral = media_integral / num_subintervalos
+
+            T_arestas[k] = media_integral
+
+        else:
+            raise ValueError("metodo deve ser 'trapezio' ou 'ponto_medio'.")
+
+    tempo = time.perf_counter() - t_inicio
+
+    return T_arestas, tempo
+
+
+def calcular_condutancias_por_temperatura(conec, Xno, T_arestas, area_canal=2.5e-7):
+    """
+    Calcula a condut?ncia hidr?ulica de cada canal usando a temperatura m?dia
+    da pr?pria aresta.
+    """
+    nc = len(conec)
+    C = np.zeros(nc)
+
+    D = np.sqrt(4.0 * area_canal / np.pi)
+
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+
+        p1 = Xno[n1]
+        p2 = Xno[n2]
+
+        Lk = np.linalg.norm(p2 - p1)
+        mu_k = viscosidade_agua_T(T_arestas[k])
+
+        kappa_k = np.pi * D**4 / (128.0 * mu_k)
+        C[k] = kappa_k / Lk
+
+    return C
