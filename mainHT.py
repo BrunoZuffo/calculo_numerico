@@ -129,84 +129,43 @@ if __name__ == "__main__":
     # =========================================================================
     # 3. EXERCÍCIOS DA PARTE 2 (SEÇÃO 4.3.3 - ANÁLISE PARAMÉTRICA DO SÓLIDO)
     # =========================================================================
-    print("\n" + "="*80)
+    print("=" * 80)
     print("3. EXERCÍCIOS DA PARTE 2 (SEÇÃO 4.3.3): ANÁLISE PARAMÉTRICA")
-    print("="*80)
-
-    # --- TAREFA 4.3.3.1: Estudo de Convergência de Malha e d_max ---
-    print("\n" + "="*50)
-    print("INICIANDO EXERCÍCIO 1: ANÁLISE PARAMÉTRICA DE D_MAX E MALHAS")
-    print("="*50)
+    print("=" * 80)
     
-    lista_malhas = [(61, 31), (121, 61), (241, 121)]
-    lista_dmax = [0.00025, 0.0005, 0.001]
-
-    for (Nx, Ny) in lista_malhas:
-        for d_max_val in lista_dmax:
-            print(f"\n-> Analisando Malha ({Nx}x{Ny}) com d_max = {d_max_val}")
-            t_inicio = time.time()
+    # --- TAREFA 4.3.3.1: Estudo de Convergência de Malha e d_max ---
+    print("Iniciando varredura paramétrica de malhas e distâncias de corte:")
+    malhas = [(61, 31), (121, 61), (241, 121)]
+    d_max_valores = [0.00025, 0.0005, 0.0010]
+    
+    print(f"{'Malha (Nx x Ny)':<18} | {'d_max (mm)':<12} | {'T_max (°C)':<12} | {'Tempo K (s)':<12} | {'Tempo Solv (s)':<12}")
+    print("-" * 80)
+    
+    for (Nx, Ny) in malhas:
+        x_coords = np.linspace(0, Lx, Nx)
+        TB = 10.0 + 20.0 * (x_coords / Lx)
+        TT = 10.0 + 20.0 * (x_coords / Lx)
+        
+        for d_max_val in d_max_valores:
+            t_k_ini = time.perf_counter()
             
-            x_coords = np.linspace(0, Lx, Nx)
-            y_coords = np.linspace(0, Ly, Ny)
-            TB = 10.0 + 20.0 * (x_coords / Lx)
-            TT = 10.0 + 20.0 * (x_coords / Lx)
-            
-            # Etapa 1: Calcula o campo de condutividade nas faces (FUNÇÃO CORRIGIDA)
-            t0 = time.time()
+            # CORREÇÃO: Utilizar Nx, Ny e d_max_val dinâmicos do laço, e não os de referência (_ref)
             k_e, k_n = ObterCondutividadeFaces_ViaNos(Nx, Ny, Lx, Ly, Xno, conec, d_max_val, k_0)
-            t_k = time.time() - t0
             
-            # Etapa 2: Montagem do sistema
-            t0 = time.time()
-            A_s, b_s = CriarSistemaSolidoCondutividadeVariavel(Nx, Ny, Lx, Ly, k_e, k_n, TL, TR, TB, TT, fonte_calor, R_incl, xincl, yincl, TC)
-            A_s_sparse = sparse.csr_matrix(A_s)
-            t_assembly = time.time() - t0
+            t_k_fim = time.perf_counter()
             
-            # Etapa 3: Resolução do sistema
-            t0 = time.time()
-            T_solid_flat = spsolve(A_s_sparse, b_s)
-            t_solve = time.time() - t0
+            t_s_ini = time.perf_counter()
             
-            t_total = time.time() - t_inicio
-            T_max = np.max(T_solid_flat)
-            T_placa_2D = T_solid_flat.reshape((Ny, Nx))
+            # CORREÇÃO: Passar k_e e k_n diretamente
+            A_s, b_s = CriarSistemaSolidoCondutividadeVariavel(
+                Nx, Ny, Lx, Ly, k_e, k_n, TL, TR, TB, TT, fonte_calor, R_incl, xincl, yincl, TC
+            )
+            T_solid_flat = spsolve(sparse.csr_matrix(A_s), b_s)
+            t_s_fim = time.perf_counter()
             
-            print(f"   [Tempo] Calc k_faces: {t_k:.3f}s | Assembly: {t_assembly:.3f}s | Solve: {t_solve:.3f}s | Total: {t_total:.3f}s")
-            print(f"   [Resultado] Temperatura Máxima na Placa: {T_max:.2f} °C")
+            print(f"{f'{Nx} x {Ny}':<18} | {d_max_val*1000:<12.3f} | {np.max(T_solid_flat):<12.2f} | {t_k_fim - t_k_ini:<12.4f} | {t_s_fim - t_s_ini:<12.4f}")
             
-            # --- GERAÇÃO DOS GRÁFICOS ---
-            fig = plt.figure(figsize=(15, 4))
-            
-            # 1. Mapa de contornos 2D
-            ax1 = plt.subplot(1, 3, 1)
-            cf = ax1.contourf(x_coords * 1000, y_coords * 1000, T_placa_2D, levels=50, cmap='jet')
-            plt.colorbar(cf, ax=ax1, label='T (°C)')
-            ax1.set_title(f'Mapa 2D ($d_{{max}}$={d_max_val})')
-            ax1.set_xlabel('X (mm)')
-            ax1.set_ylabel('Y (mm)')
-            
-            # 2. Perfil Horizontal (Eixo Central em y = Ly/2)
-            ax2 = plt.subplot(1, 3, 2)
-            idx_y_mid = Ny // 2
-            ax2.plot(x_coords * 1000, T_placa_2D[idx_y_mid, :], 'r-', label=f'Y = {y_coords[idx_y_mid]*1000:.1f} mm')
-            ax2.set_title('Perfil Horizontal')
-            ax2.set_xlabel('X (mm)')
-            ax2.set_ylabel('T (°C)')
-            ax2.grid(True)
-            ax2.legend()
-            
-            # 3. Perfil Vertical (Eixo Central em x = Lx/2)
-            ax3 = plt.subplot(1, 3, 3)
-            idx_x_mid = Nx // 2
-            ax3.plot(y_coords * 1000, T_placa_2D[:, idx_x_mid], 'b-', label=f'X = {x_coords[idx_x_mid]*1000:.1f} mm')
-            ax3.set_title('Perfil Vertical')
-            ax3.set_xlabel('Y (mm)')
-            ax3.set_ylabel('T (°C)')
-            ax3.grid(True)
-            ax3.legend()
-            
-            plt.tight_layout()
-            plt.show()
+    print("-" * 80)
     
     # --- ESPAÇO PARA A TAREFA 4.3.3.2: EFEITO DO TERMO FONTE PERTURBADO (S_p) ---
     # TODO: Implementar a modificação do vetor de forças 'b_s' adicionando a contribuição
