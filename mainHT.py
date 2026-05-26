@@ -6,8 +6,8 @@ from scipy.interpolate import RegularGridInterpolator
 import time
 
 from functionsHT import (ObterCondutividadeFaces_ViaNos, CriarSistemaSolidoCondutividadeVariavel,
-                         calcular_temperatura_media_arestas, atualiza_condutancias, 
-                         plot_nos_cromaticos_hidraulica, plot_arestas_cromaticas_hidraulics, 
+                         calcular_temperatura_media_arestas, calcular_temperatura_media_arestas_ponto_medio,
+                         atualiza_condutancias, plot_nos_cromaticos_hidraulica, plot_arestas_cromaticas_hidraulics, 
                          calcular_viscosidade)
 
 from functions import GeraGrafo, Assembly as AssemblyHidraulico
@@ -208,16 +208,76 @@ cbarB_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
 
 plt.show()
 
-# Calcula a temperatura das arestas para o restante do seu código (Seção 3)
-T_arestas_final, _ = calcular_temperatura_media_arestas(int(Nx_ref), int(Ny_ref), Lx, Ly, Xno, conec, T_solid_ref)
-# -----------------------------------------------------------------------------
-# EXERCÍCIO 3, PARTE 2
-# -----------------------------------------------------------------------------
+print("JNXJANC BHUBNUXJNUAJXNUJC NUJNXJINAMIKO")
 
+# =========================================================================
+# 3. EXERCÍCIOS DA PARTE 2 (RESOLUÇÃO DO ESCOAMENTO NO GRAFO HIDRÁULICO)
+# =========================================================================
+print("\n" + "=" * 80)
+print("3. EXERCÍCIOS DA PARTE 2: ACOPLAMENTO HIDRO-TÉRMICO NO GRAFO")
+print("=" * 80)
+
+print(">> [PASSO 1] Executando Integração Numérica (Trapézio vs Ponto Médio)...")
+subintervalos = [1, 10, 100, 1000]
+resultados = []
+T_arestas_final = None
+
+for N in subintervalos:
+    # 1. Trapézio (Utiliza a função nativa que já está no seu functionsHT.py)
+    T_trap, t_trap = calcular_temperatura_media_arestas(
+        conec, Xno, T_solid_ref, int(Nx_ref), int(Ny_ref), Lx, Ly, num_subintervalos=N
+    )
+    
+    # 2. Ponto Médio (Utiliza a função definida acima)
+    T_mid, t_mid = calcular_temperatura_media_arestas_ponto_medio(
+        conec, Xno, T_solid_ref, int(Nx_ref), int(Ny_ref), Lx, Ly, num_subintervalos=N
+    )
+    
+    resultados.append({
+        'N': N,
+        'T_trap': np.mean(T_trap),
+        'T_mid': np.mean(T_mid),
+        't_trap': t_trap,
+        't_mid': t_mid
+    })
+    
+    # Adota N=1000 do Trapézio como modelo físico consolidado para prosseguir
+    if N == 1000:
+        T_arestas_final = T_trap  
+
+# Assume a discretização máxima (N=1000) como solução de referência "exata"
+T_ref = resultados[-1]['T_trap']
+
+# --- IMPRESSÃO DA TABELA 1: RESULTADOS NUMÉRICOS E ESTIMATIVA DE ERRO ---
+print("\n" + "-" * 75)
+print(" TABELA 1: RESULTADOS NUMÉRICOS E ESTIMATIVA DE ERRO (|T_N - T_1000|)")
+print("-" * 75)
+print(f"{'N':<6} | {'T_Média (Trapézio)':<20} | {'Erro (Trapézio)':<15} | {'T_Média (Ponto Médio)':<22} | {'Erro (Ponto Médio)'}")
+print("-" * 75)
+for res in resultados:
+    erro_trap = abs(res['T_trap'] - T_ref)
+    erro_mid = abs(res['T_mid'] - T_ref)
+    print(f"{res['N']:<6} | {res['T_trap']:<18.6f}   | {erro_trap:<15.2e} | {res['T_mid']:<20.6f}   | {erro_mid:.2e}")
+print("-" * 75)
+
+# --- IMPRESSÃO DA TABELA 2: TEMPO COMPUTACIONAL ---
+print("\n" + "-" * 60)
+print(" TABELA 2: COMPARAÇÃO DO TEMPO COMPUTACIONAL (s)")
+print("-" * 60)
+print(f"{'N':<6} | {'Tempo Trapézio (s)':<20} | {'Tempo Ponto Médio (s)'}")
+print("-" * 60)
+for res in resultados:
+    print(f"{res['N']:<6} | {res['t_trap']:<20.4e} | {res['t_mid']:.4e}")
+print("-" * 60 + "\n")
+
+print(">> [PASSO 2] Atualizando propriedades hidráulicas (Viscosidade Variável)...")
 C_acoplado = atualiza_condutancias(conec, Xno, T_arestas_final, Area_canal)
 
+print(">> [PASSO 3] Montando e resolvendo o sistema hidráulico acoplado...")
 A_h_mod = AssemblyHidraulico(conec, C_acoplado)
 A_h_mod_tilde = A_h_mod.copy()
+
+# Aplica as condições de contorno de saída
 A_h_mod_tilde[n_outlet, :] = 0.0
 A_h_mod_tilde[n_outlet, n_outlet] = 1.0
 
@@ -231,9 +291,15 @@ print(f"Variação da Perda de Carga Realizada: {((P_max_mod - P_max_iso)/P_max_
 print("-" * 80)
 
 # Renderização dos perfis de controle térmico do fluido
+print("\n>> [PASSO 4] Renderizando distribuição térmica nas arestas...")
 plot_arestas_cromaticas_hidraulics(conec, Xno, T_arestas_final, titulo="Distribuição Térmica Integrada nas Arestas da Rede (N=1000)")
-print("\n")
 
+print("\n" + "=" * 80)
+print("SIMULAÇÃO DO GÊMEO DIGITAL CONCLUÍDA COM SUCESSO!")
+print("=" * 80)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------
 
 # =========================================================================
 # 3. EXERCÍCIOS DA PARTE 2 (SEÇÃO 4.3.3 - ANÁLISE PARAMÉTRICA DO SÓLIDO)

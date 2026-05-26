@@ -165,6 +165,30 @@ def calcular_temperatura_media_arestas(conec, Xno, T_solid_flat, Nx, Ny, Lx, Ly,
     t_fim = time.perf_counter()
     return T_arestas, (t_fim - t_inicio)
 
+def calcular_temperatura_media_arestas_ponto_medio(conec, Xno, T_solid_flat, Nx, Ny, Lx, Ly, num_subintervalos=100):
+    t_inicio = time.perf_counter()
+    x_coords = np.linspace(0, Lx, Nx)
+    y_coords = np.linspace(0, Ly, Ny)
+    T_2D = T_solid_flat.reshape((Ny, Nx)).T 
+    
+    interp = RegularGridInterpolator((x_coords, y_coords), T_2D, method='linear')
+    nc = len(conec)
+    T_arestas = np.zeros(nc)
+    
+    dt = 1.0 / num_subintervalos
+    # Ponto médio avalia exatamente no meio de cada subintervalo
+    s = np.linspace(dt/2.0, 1.0 - dt/2.0, num_subintervalos)
+    
+    for k in range(nc):
+        n1, n2 = int(conec[k, 0]), int(conec[k, 1])
+        p1, p2 = Xno[n1], Xno[n2]
+        pts = p1 + s[:, np.newaxis] * (p2 - p1)
+        T_amostras = interp(pts)
+        T_arestas[k] = np.mean(T_amostras) # A média amostral é equivalente à integral neste domínio
+        
+    t_fim = time.perf_counter()
+    return T_arestas, (t_fim - t_inicio)
+
 def calcular_viscosidade(T):
     return 0.001791 / (1.0 + 0.03368 * T + 0.000221 * T**2)
 
