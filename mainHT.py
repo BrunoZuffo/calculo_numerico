@@ -298,7 +298,7 @@ from scipy.sparse.linalg import spsolve
 
 
 from functionsHT import ObterCondutividadeFaces, CriarSistemaSolidoCondutividadeVariavel
- from SUA_BIBLIOTECA import GeraGrafo 
+ from functions import GeraGrafo 
 
 print("\n" + "="*50)
 print("INICIANDO EXERCÍCIO 1: ANÁLISE PARAMÉTRICA DE D_MAX E MALHAS")
