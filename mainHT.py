@@ -10,7 +10,8 @@ import pandas as pd
 from functionsHT import (ObterCondutividadeFaces_ViaNos, CriarSistemaSolidoCondutividadeVariavel,
                          calcular_temperatura_media_arestas, calcular_temperatura_media_arestas_ponto_medio,
                          atualiza_condutancias, plot_nos_cromaticos_hidraulica, plot_arestas_cromaticas_hidraulics, 
-                         calcular_viscosidade)
+                         calcular_viscosidade, carregar_rede_hidraulica, calc_campo_fonte ,SolveSystem_FonteEspacial,
+                         obter_limites_e_niveis_individuais, plotar_rede_sobre_ax)
 
 from functions import SolveNetwork, calc_vazao, calc_potencia, GeraGrafo, Assembly as AssemblyHidraulico
 
@@ -596,3 +597,237 @@ for r in resultados_ex5:
           f"{r['t_geometria']:<10.4f} | {r['t_solucao']:<10.4f} | {r['t_total']:.4f}")
 print("-" * 100)
 print("\nExercício 1 da Seção 4.3.3 executado com completo sucesso estrutural!")
+
+# =====================================================================
+#EXERCICIO 2
+# =====================================================================
+# =============================================================================
+# EXECUÇÃO: EXERCÍCIO 2 (Secção 4.3.2) - INFLUÊNCIA NO TERMO FONTE E SUMIDOURO
+# =============================================================================
+
+print("\n" + "="*54)
+print(" EXERCÍCIO 2 (Secção 4.3.2) - INFLUÊNCIA NO TERMO FONTE")
+print("="*54)
+
+# Parâmetros Físicos Locais do Exercício
+Lx_cap4 = 0.03
+Ly_cap4 = 0.015
+k0_cap4 = 0.25
+fonte_nominal = 5e5
+TR_cap4 = 30.0
+
+cilindro_cap4 = {
+    'R': 0.0025,
+    'cx': 0.0225,
+    'cy': 0.0075,
+    'Tc': 35.0
+}
+
+# Passando o escopo do bloco atual (globals()) para que ele possa capturar
+# as funções 'GeraGrafo' ou 'Xno'/'conec' definidas nas células/módulos anteriores
+Xno, conec = carregar_rede_hidraulica(
+    levels=3,
+    spine_length=6,
+    Lx=Lx_cap4,
+    Ly=Ly_cap4,
+    globals_dict=globals()
+)
+
+print("Rede hidráulica carregada com sucesso.")
+print("Xno.shape =", Xno.shape)
+print("conec.shape =", conec.shape)
+print("x mínimo/máximo =", np.min(Xno[:, 0]), np.max(Xno[:, 0]))
+print("y mínimo/máximo =", np.min(Xno[:, 1]), np.max(Xno[:, 1]))
+
+# Identificação das Arestas da Espinha Central
+y_center = 0.5 * Ly_cap4
+spine_edges = []
+tol_spine = 1e-4
+
+for k in range(conec.shape[0]):
+    n1, n2 = conec[k]
+    y1 = Xno[n1, 1]
+    y2 = Xno[n2, 1]
+
+    if abs(y1 - y_center) < tol_spine and abs(y2 - y_center) < tol_spine:
+        spine_edges.append(k)
+
+if len(spine_edges) == 0:
+    print("[AVISO] Nenhuma aresta da espinha central foi detectada.")
+else:
+    print(f"Arestas na espinha central detectadas: {len(spine_edges)}")
+
+nc = conec.shape[0]
+I_j_homogeneo = np.ones(nc)
+I_j_heterogeneo = np.full(nc, 0.1)
+I_j_heterogeneo[spine_edges] = 100.0
+
+# Execução das Malhas e Cenários
+Nx_m = 121
+Ny_m = 61
+d_max_f = 0.001
+
+S0_list = [1e5, 5e5, 1e6, -1e5, -5e5, -1e6]
+
+x_grid = np.linspace(0.0, Lx_cap4, Nx_m)
+y_grid = np.linspace(0.0, Ly_cap4, Ny_m)
+X, Y = np.meshgrid(x_grid, y_grid)
+
+resultados_ex2 = []
+print("\nCalculando cenários térmicos...")
+
+for S0 in S0_list:
+    fonte_homo = calc_campo_fonte(Nx_m, Ny_m, Lx_cap4, Ly_cap4, Xno, conec, S0, d_max_f, I_j_homogeneo)
+    T_homo = SolveSystem_FonteEspacial(Nx_m, Ny_m, Lx_cap4, Ly_cap4, k0_cap4, fonte_nominal, cilindro_cap4, TR_cap4, fonte_homo)
+
+    fonte_hete = calc_campo_fonte(Nx_m, Ny_m, Lx_cap4, Ly_cap4, Xno, conec, S0, d_max_f, I_j_heterogeneo)
+    T_hete = SolveSystem_FonteEspacial(Nx_m, Ny_m, Lx_cap4, Ly_cap4, k0_cap4, fonte_nominal, cilindro_cap4, TR_cap4, fonte_hete)
+
+    resultados_ex2.append({
+        'S0': S0,
+        'fonte_homo': fonte_homo,
+        'fonte_hete': fonte_hete,
+        'T_homo': T_homo,
+        'T_hete': T_hete,
+        'Tmin_homo': np.min(T_homo),
+        'Tmax_homo': np.max(T_homo),
+        'Tmin_hete': np.min(T_hete),
+        'Tmax_hete': np.max(T_hete)
+    })
+
+# ==============================================================================
+# 1. MAPAS DE TEMPERATURA - DISTRIBUIÇÃO HOMOGÊNEA (Matriz 3x2)
+# ==============================================================================
+fig, axes = plt.subplots(3, 2, figsize=(12, 10), constrained_layout=True)
+fig.suptitle("Mapas de Temperatura - Distribuição Homogênea ($I_j = 1$)", fontsize=14, fontweight='bold')
+
+for i, item in enumerate(resultados_ex2):
+    linha = i // 2
+    col = i % 2
+    ax = axes[linha, col]
+    
+    S0 = item['S0']
+    Z = item['T_homo']
+    
+    vmin, vmax, levels = obter_limites_e_niveis_individuais(Z, n_levels=26)
+    cf = ax.contourf(X, Y, Z, levels=levels, cmap='jet', vmin=vmin, vmax=vmax, zorder=1)
+    plotar_rede_sobre_ax(ax, Xno, conec)
+    
+    cbar = fig.colorbar(cf, ax=ax, shrink=0.9)
+    cbar.set_label('Temperatura (°C)')
+    
+    ax.set_title(rf"$S_0 = {S0:+.1e}\ W/m^3$", fontsize=10)
+    ax.set_xlabel("x (cm)")
+    ax.set_ylabel("y (cm)")
+    ax.set_xlim(0.0, Lx_cap4)
+    ax.set_ylim(0.0, Ly_cap4)
+
+plt.show()
+
+
+# ==============================================================================
+# 2. MAPAS DE TEMPERATURA - DISTRIBUIÇÃO HETEROGÊNEA (Matriz 3x2)
+# ==============================================================================
+fig, axes = plt.subplots(3, 2, figsize=(12, 10), constrained_layout=True)
+fig.suptitle("Mapas de Temperatura - Distribuição Heterogênea (Espinha)", fontsize=14, fontweight='bold')
+
+for i, item in enumerate(resultados_ex2):
+    linha = i // 2
+    col = i % 2
+    ax = axes[linha, col]
+    
+    S0 = item['S0']
+    Z = item['T_hete']
+    
+    vmin, vmax, levels = obter_limites_e_niveis_individuais(Z, n_levels=26)
+    cf = ax.contourf(X, Y, Z, levels=levels, cmap='jet', vmin=vmin, vmax=vmax, zorder=1)
+    plotar_rede_sobre_ax(ax, Xno, conec)
+    
+    cbar = fig.colorbar(cf, ax=ax, shrink=0.9)
+    cbar.set_label('Temperatura (°C)')
+    
+    ax.set_title(rf"$S_0 = {S0:+.1e}\ W/m^3$", fontsize=10)
+    ax.set_xlabel("x (cm)")
+    ax.set_ylabel("y (cm)")
+    ax.set_xlim(0.0, Lx_cap4)
+    ax.set_ylim(0.0, Ly_cap4)
+
+plt.show()
+
+
+# ==============================================================================
+# 3. TABELA DE COMPARAÇÃO NO TERMINAL (Inalterada)
+# ==============================================================================
+print("\n" + "=" * 105)
+print("COMPARAÇÃO DOS VALORES MÁXIMOS DE TEMPERATURA")
+print("=" * 105)
+print(f"{'S0':<12} | {'Tmin Homo (°C)':<18} | {'Tmax Homo (°C)':<18} | {'Tmin Hete (°C)':<18} | {'Tmax Hete (°C)':<18}")
+print("-" * 105)
+for item in resultados_ex2:
+    print(f"{item['S0']:<12.0e} | {item['Tmin_homo']:<18.4f} | {item['Tmax_homo']:<18.4f} | {item['Tmin_hete']:<18.4f} | {item['Tmax_hete']:<18.4f}")
+print("=" * 105)
+
+
+# ==============================================================================
+# 4. PERFIS DE TEMPERATURA — DISTRIBUIÇÃO HOMOGÊNEA (Curvas Agrupadas)
+# ==============================================================================
+fig, axes = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
+fig.suptitle("Perfis de Temperatura - Distribuição Homogênea ($I_j = 1$)", fontsize=13, fontweight='bold')
+
+mid_y, mid_x = Ny_m // 2, Nx_m // 2
+
+# Loop para plotar todas as curvas de S0 no mesmo gráfico
+for item in resultados_ex2:
+    S0 = item['S0']
+    lbl = f"$S_0 = {S0:+.1e}$"
+    
+    # Horizontal (fixo em y)
+    axes[0].plot(x_grid, item['T_homo'][mid_y, :], label=lbl, linewidth=1.2)
+    # Vertical (fixo em x)
+    axes[1].plot(y_grid, item['T_homo'][:, mid_x], label=lbl, linewidth=1.2)
+
+# Customização do gráfico Horizontal
+axes[0].set_title(r"Perfil Horizontal ($y = 0.75\ cm$)")
+axes[0].set_xlabel("x (cm)")
+axes[0].set_ylabel("Temperatura (°C)")
+axes[0].grid(True, linestyle='--', alpha=0.5)
+axes[0].legend(fontsize=8, loc='best')
+
+# Customização do gráfico Vertical
+axes[1].set_title(r"Perfil Vertical ($x = 1.0\ cm$)")
+axes[1].set_xlabel("y (cm)")
+axes[1].set_ylabel("Temperatura (°C)")
+axes[1].grid(True, linestyle='--', alpha=0.5)
+axes[1].legend(fontsize=8, loc='best')
+
+plt.show()
+
+
+# ==============================================================================
+# 5. PERFIS DE TEMPERATURA — DISTRIBUIÇÃO HETEROGÊNEA (Curvas Agrupadas)
+# ==============================================================================
+fig, axes = plt.subplots(1, 2, figsize=(13, 5), constrained_layout=True)
+fig.suptitle("Perfis de Temperatura - Distribuição Heterogênea (Espinha)", fontsize=13, fontweight='bold')
+
+for item in resultados_ex2:
+    S0 = item['S0']
+    lbl = f"$S_0 = {S0:+.1e}$"
+    
+    # Horizontal (fixo em y)
+    axes[0].plot(x_grid, item['T_hete'][mid_y, :], label=lbl, linewidth=1.2)
+    # Vertical (fixo em x)
+    axes[1].plot(y_grid, item['T_hete'][:, mid_x], label=lbl, linewidth=1.2)
+
+# Customização do gráfico Horizontal
+axes[0].set_title(r"Perfil Horizontal ($y = 0.75\ cm$)")
+axes[0].set_xlabel("x (cm)")
+axes[0].set_ylabel("Temperatura (°C)")
+axes[0].grid(True, linestyle='--', alpha=0.5)
+axes[0].legend(fontsize=8, loc='best')
+
+# Customização do gráfico Vertical
+axes[1].set_title(r"Perfil Vertical ($x = 1.0\ cm$)")
+axes[1].set_xlabel("y (cm)")
+axes[1].set_ylabel("Temperatura (°C)")
+axes[1].grid(True, linestyle='--', alpha=0.5)
+axes[1].legend(fontsize=8, loc='best')

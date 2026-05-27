@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import sparse
+from scipy.sparse.linalg import spsolve
 from scipy.spatial import cKDTree
 from scipy.interpolate import RegularGridInterpolator
 import matplotlib.pyplot as plt
@@ -271,3 +272,287 @@ def plot_arestas_cromaticas_hidraulics(conec, Xno, T_arestas, titulo="Temperatur
     ax.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
     plt.show()
+
+# =====================================================================
+# EXERCÍCIO 4.3.3 - ITEM 2: TERMO FONTE GAUSSIANO DA REDE
+# =====================================================================
+# =============================================================================
+# FUNÇÕES DO EXERCÍCIO 2 (Secção 4.3.2) - ADICIONADAS
+# =============================================================================
+
+def normalizar_rede_hidraulica(Xno_local, conec_local, Lx, Ly):
+    Xno_local = np.asarray(Xno_local, dtype=float)
+    conec_local = np.asarray(conec_local, dtype=int)
+
+    if Xno_local.ndim != 2:
+        raise RuntimeError("Xno deveria ser uma matriz bidimensional.")
+
+    if Xno_local.shape[0] == 2 and Xno_local.shape[1] != 2:
+        Xno_local = Xno_local.T
+
+    if Xno_local.shape[1] != 2:
+        raise RuntimeError("Xno deveria ter duas colunas: x e y.")
+
+    if conec_local.ndim != 2:
+        raise RuntimeError("conec deveria ser uma matriz bidimensional.")
+
+    if conec_local.shape[0] == 2 and conec_local.shape[1] != 2:
+        conec_local = conec_local.T
+
+    if conec_local.shape[1] != 2:
+        raise RuntimeError("conec deveria ter duas colunas.")
+
+    if np.min(conec_local) == 1:
+        conec_local = conec_local - 1
+
+    if np.max(np.abs(Xno_local)) > 0.5:
+        Xno_local = Xno_local * 0.001
+
+    if np.min(Xno_local[:, 1]) < -1e-12:
+        Xno_local[:, 1] = Xno_local[:, 1] + 0.5 * Ly
+
+    if np.max(conec_local) >= Xno_local.shape[0]:
+        raise RuntimeError(
+            "conec possui índice maior que o número de nós em Xno.\n"
+            "Verifique se a conectividade começa em 0 ou 1."
+        )
+
+    return Xno_local, conec_local
+
+
+def carregar_rede_hidraulica(levels=3, spine_length=6, Lx=0.03, Ly=0.015, globals_dict=None):
+    if globals_dict is None:
+        globals_dict = globals()
+
+    nomes_possiveis = [
+        "generate_graph_arrays",
+        "gera_grafo_new",
+        "GeraGrafo_new",
+        "gera_grapho_new",
+        "GeraGrapho_new",
+        "GeraGrafo",
+        "gera_grafo"
+    ]
+
+    funcao_grafo = None
+    for nome in nomes_possiveis:
+        if nome in globals_dict:
+            funcao_grafo = globals_dict[nome]
+            print(f"Função de grafo encontrada: {nome}")
+            break
+
+    if funcao_grafo is not None:
+        tentativas = [
+            lambda: funcao_grafo(levels=levels),
+            lambda: funcao_grafo(levels),
+            lambda: funcao_grafo(levels, spine_length),
+            lambda: funcao_grafo(complex_level=levels, spine_length=spine_length),
+            lambda: funcao_grafo()
+        ]
+
+        saida = None
+        ultimo_erro = None
+
+        for tentativa in tentativas:
+            try:
+                saida = tentativa()
+                break
+            except TypeError as erro:
+                ultimo_erro = erro
+
+        if saida is None:
+            raise RuntimeError(
+                "Não foi possível chamar a função de geração de grafo.\n"
+                f"Último erro: {ultimo_erro}"
+            )
+
+        if not isinstance(saida, tuple) or len(saida) < 2:
+            raise RuntimeError(
+                "A função de grafo deveria retornar algo do tipo:\n"
+                "Xno, conec"
+            )
+
+        A = np.asarray(saida[0])
+        B = np.asarray(saida[1])
+
+        if np.issubdtype(A.dtype, np.integer) and not np.issubdtype(B.dtype, np.integer):
+            conec_local = A
+            Xno_local = B
+        else:
+            Xno_local = A
+            conec_local = B
+
+        return normalizar_rede_hidraulica(Xno_local, conec_local, Lx, Ly)
+
+    if "Xno" in globals_dict and "conec" in globals_dict:
+        print("Usando Xno e conec já existentes na memória.")
+        return normalizar_rede_hidraulica(globals_dict["Xno"], globals_dict["conec"], Lx, Ly)
+
+    raise RuntimeError(
+        "Nenhuma função de geração de grafo foi encontrada.\n"
+        "Execute primeiro a célula que define gera_grafo_new, "
+        "gera_grapho_new ou generate_graph_arrays."
+    )
+
+
+def dist_pontos_segmento_vetorizado(P, A, B):
+    AB = B - A
+    AP = P - A
+    AB_len2 = np.dot(AB, AB)
+
+    if AB_len2 < 1e-20:
+        return np.linalg.norm(P - A, axis=1)
+
+    t = np.sum(AP * AB, axis=1) / AB_len2
+    t = np.clip(t, 0.0, 1.0)
+    proj = A + t[:, np.newaxis] * AB
+
+    return np.linalg.norm(P - proj, axis=1)
+
+
+def calc_campo_fonte(Nx, Ny, Lx, Ly, Xno, conec, S0, d_max, I_j_array):
+    x = np.linspace(0.0, Lx, Nx)
+    y = np.linspace(0.0, Ly, Ny)
+    X_grid, Y_grid = np.meshgrid(x, y)
+
+    pts = np.column_stack((X_grid.ravel(), Y_grid.ravel()))
+    arvore_pts = cKDTree(pts)
+
+    A_edges = Xno[conec[:, 0]]
+    B_edges = Xno[conec[:, 1]]
+
+    sigma = d_max / 2.0
+    nc = conec.shape[0]
+    Sp = np.zeros(len(pts))
+
+    for j in range(nc):
+        A = A_edges[j]
+        B = B_edges[j]
+
+        ponto_medio = 0.5 * (A + B)
+        comprimento = np.linalg.norm(B - A)
+        raio_busca = 0.5 * comprimento + d_max
+
+        idx_cand = arvore_pts.query_ball_point(ponto_medio, raio_busca)
+        if len(idx_cand) == 0:
+            continue
+
+        idx_cand = np.asarray(idx_cand, dtype=int)
+        P = pts[idx_cand]
+
+        dist = dist_pontos_segmento_vetorizado(P, A, B)
+        mask = dist <= d_max
+
+        if np.any(mask):
+            idx_ok = idx_cand[mask]
+            Sp[idx_ok] += (
+                I_j_array[j]
+                * np.exp(-(dist[mask] ** 2) / (2.0 * sigma ** 2))
+            )
+
+    fonte_2d = S0 * Sp
+    print(f"S0 = {S0:.1e} | fonte min = {np.min(fonte_2d):.3e} | fonte max = {np.max(fonte_2d):.3e}")
+    return fonte_2d.reshape((Ny, Nx))
+
+
+def SolveSystem_FonteEspacial(Nx, Ny, Lx, Ly, k0, fonte_nominal, cilindro, TR, fonte_2d):
+    nunk = Nx * Ny
+    hx = Lx / (Nx - 1)
+    hy = Ly / (Ny - 1)
+
+    x = np.linspace(0.0, Lx, Nx)
+    y = np.linspace(0.0, Ly, Ny)
+
+    ae = k0 * hy / hx
+    aw = k0 * hy / hx
+    an = k0 * hx / hy
+    ass = k0 * hx / hy
+
+    rows = []
+    cols = []
+    data = []
+
+    b = hx * hy * (fonte_nominal + fonte_2d.ravel())
+
+    R = cilindro['R']
+    cx = cilindro['cx']
+    cy = cilindro['cy']
+    Tc = cilindro['Tc']
+
+    def ij2n_local(i, j, Nx_val):
+        return i + j * Nx_val
+
+    for j in range(Ny):
+        for i in range(Nx):
+            idx = ij2n_local(i, j, Nx)
+            xi = x[i]
+            yj = y[j]
+
+            eh_borda = (i == 0 or i == Nx - 1 or j == 0 or j == Ny - 1)
+            eh_cilindro = ((xi - cx) ** 2 + (yj - cy) ** 2 <= R ** 2)
+
+            if eh_borda:
+                rows.append(idx)
+                cols.append(idx)
+                data.append(1.0)
+
+                if j == 0 or j == Ny - 1:
+                    b[idx] = 10.0 + 20.0 * (xi / Lx)
+                elif i == 0:
+                    b[idx] = 10.0
+                elif i == Nx - 1:
+                    b[idx] = TR
+
+            elif eh_cilindro:
+                rows.append(idx)
+                cols.append(idx)
+                data.append(1.0)
+                b[idx] = Tc
+            else:
+                rows.append(idx)
+                cols.append(idx)
+                data.append(ae + aw + an + ass)
+
+                rows.append(idx)
+                cols.append(ij2n_local(i + 1, j, Nx))
+                data.append(-ae)
+
+                rows.append(idx)
+                cols.append(ij2n_local(i - 1, j, Nx))
+                data.append(-aw)
+
+                rows.append(idx)
+                cols.append(ij2n_local(i, j + 1, Nx))
+                data.append(-an)
+
+                rows.append(idx)
+                cols.append(ij2n_local(i, j - 1, Nx))
+                data.append(-ass)
+
+    A = sparse.coo_matrix((data, (rows, cols)), shape=(nunk, nunk)).tocsr()
+    T_1D = spsolve(A, b)
+    return T_1D.reshape((Ny, Nx))
+
+
+def plotar_rede_sobre_ax(ax, Xno, conec):
+    for n1, n2 in conec:
+        ax.plot(
+            [Xno[n1, 0], Xno[n2, 0]],
+            [Xno[n1, 1], Xno[n2, 1]],
+            color='black', linewidth=0.55, alpha=0.55, zorder=5
+        )
+    ax.scatter(
+        Xno[:, 0], Xno[:, 1],
+        s=7, color='black', edgecolors='white', linewidths=0.20, zorder=6
+    )
+
+
+def obter_limites_e_niveis_individuais(Z, n_levels=26):
+    vmin = np.nanmin(Z)
+    vmax = np.nanmax(Z)
+    if np.isclose(vmin, vmax):
+        delta = max(1.0, abs(vmin) * 0.05 + 1e-12)
+        vmin = vmin - delta
+        vmax = vmax + delta
+    levels = np.linspace(vmin, vmax, n_levels)
+    return vmin, vmax, levels
