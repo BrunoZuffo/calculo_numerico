@@ -1,392 +1,598 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.sparse.linalg import spsolve
-from scipy import sparse
-from scipy.spatial import cKDTree
-import time
-from functionsHT import calcular_temperatura_media_arestas, plot_arestas_cromaticas_hidraulics, CalcularK_Face, ObterCondutividadeFaces, CriarSistemaSolidoCondutividadeVariavel
-
-# Importações dos teus módulos existentes
-from functions import GeraGrafo, AssemblyVectorC, Assembly as AssemblyHidraulico, calc_vazao
-
-# =====================================================================
-# 1. FUNÇÕES DO PROFESSOR (mapea_pontos_prox.py integradas)
-# =====================================================================
-def calcular_distancia_ponto_segmento(p, a, b):
-    ab = b - a
-    ap = p - a
-    ab_2 = np.dot(ab, ab)
-    if ab_2 == 0:
-        return np.linalg.norm(p - a)
-    t = np.dot(ap, ab) / ab_2
-    t = np.clip(t, 0.0, 1.0)
-    ponto_proximo = a + t * ab
-    return np.linalg.norm(p - ponto_proximo)
-
-def CreateMapDistance(Lx, Ly, Nx, Ny, nos_rede, conexoes_rede, d_max):
-    x = np.linspace(0, Lx, Nx)
-    y = np.linspace(0, Ly, Ny)
-    X, Y = np.meshgrid(x, y)
-    pontos_grade = np.column_stack((X.ravel(), Y.ravel()))
-    
-    arvore_grade = cKDTree(pontos_grade)
-    mapa_proximidade = [[] for _ in range(Nx * Ny)]
-    
-    for id_aresta, (idx_i, idx_j) in enumerate(conexoes_rede):
-        p_i = nos_rede[idx_i]
-        p_j = nos_rede[idx_j]
-        
-        ponto_medio = (p_i + p_j) / 2.0
-        comprimento_aresta = np.linalg.norm(p_j - p_i)
-        raio_busca = (comprimento_aresta / 2.0) + d_max
-        
-        indices_candidatos = arvore_grade.query_ball_point(ponto_medio, raio_busca)
-        
-        for idx_ponto in indices_candidatos:
-            ponto = pontos_grade[idx_ponto]
-            dist = calcular_distancia_ponto_segmento(ponto, p_i, p_j)
-            if dist <= d_max:
-                mapa_proximidade[idx_ponto].append((id_aresta, dist))
-                
-    return mapa_proximidade
-
-# =====================================================================
-# 2. FUNÇÕES DE ACOPLAMENTO TÉRMICO E ESTRUTURAÇÃO DA PLACA
-# =====================================================================
-def CriarSistemaSolidoBase(Nx, Ny, Lx, Ly, k_solid, TL, TR, TB, TT, fonte_calor):
-    """Monta a matriz de condução pura do sólido (Diferenças Finitas)"""
-    nunk = Nx * Ny
-    A = np.zeros((nunk, nunk))
-    b = np.zeros(nunk)
-    hx = Lx / (Nx - 1)
-    hy = Ly / (Ny - 1)
-    
-    for i in range(Nx):
-        for j in range(Ny):
-            Ic = i + j * Nx
-            
-            # Condições de contorno de Dirichlet nas bordas da placa
-            if i == 0:
-                A[Ic, Ic] = 1.0
-                b[Ic] = TL
-            elif i == Nx - 1:
-                A[Ic, Ic] = 1.0
-                b[Ic] = TR
-            elif j == 0:
-                A[Ic, Ic] = 1.0
-                b[Ic] = TB[i]
-            elif j == Ny - 1:
-                A[Ic, Ic] = 1.0
-                b[Ic] = TT[i]
-            else:
-                # Nós internos: -k * Laplacian(T) = fonte_calor
-                Ie, Iw = (i + 1) + j * Nx, (i - 1) + j * Nx
-                In, Is = i + (j + 1) * Nx, i + (j - 1) * Nx
-                
-                A[Ic, Ic] = 2 * k_solid / hx**2 + 2 * k_solid / hy**2
-                A[Ic, Ie] = -k_solid / hx**2
-                A[Ic, Iw] = -k_solid / hx**2
-                A[Ic, In] = -k_solid / hy**2
-                A[Ic, Is] = -k_solid / hy**2
-                b[Ic] = fonte_calor
-                
-    return A, b
-
-def CalcularComprimentos(Xno, conec):
-    Nc = len(conec)
-    L_canos = np.zeros(Nc)
-    for k, (n1, n2) in enumerate(conec):
-        dx = Xno[n2, 0] - Xno[n1, 0]
-        dy = Xno[n2, 1] - Xno[n1, 1]
-        L_canos[k] = np.sqrt(dx**2 + dy**2)
-    return L_canos
-
-def ObterTemperaturaSolidoNosCanais(conec, T_solid_flat, mapa_proximidade):
-    """Calcula a temperatura média do sólido que envolve cada canal"""
-    Nc = len(conec)
-    T_s_canais = np.zeros(Nc)
-    contagem_nos_por_canal = np.zeros(Nc)
-    
-    for id_no, arestas_proximas in enumerate(mapa_proximidade):
-        for id_aresta, dist in arestas_proximas:
-            T_s_canais[id_aresta] += T_solid_flat[id_no]
-            contagem_nos_por_canal[id_aresta] += 1
-            
-    for k in range(Nc):
-        if contagem_nos_por_canal[k] > 0:
-            T_s_canais[k] /= contagem_nos_por_canal[k]
-        else:
-            T_s_canais[k] = np.mean(T_solid_flat)
-            
-    return T_s_canais, contagem_nos_por_canal
-
-def AssemblyTermicoFluido(Xno, conec, Q, L_canos, P_canos, T_s_canais, rho, cp, hc, T_inlet, n_inlet):
-    """Monta o sistema térmico para a temperatura do fluido nos canais (Upwind)"""
-    Nv = len(Xno)
-    Af = np.zeros((Nv, Nv))
-    bf = np.zeros(Nv)
-    
-    for k, (n1, n2) in enumerate(conec):
-        qk = Q[k]
-        n_in, n_out = (n1, n2) if qk >= 0 else (n2, n1)
-        abs_qk = abs(qk)
-        Lk = L_canos[k]
-        Pk = P_canos[k]
-        
-        if n_out != n_inlet:
-            Af[n_out, n_out] += rho * cp * abs_qk + hc * Pk * Lk
-            Af[n_out, n_in]  += -rho * cp * abs_qk
-            bf[n_out]        += hc * Pk * Lk * T_s_canais[k]
-            
-    Af[n_inlet, :] = 0.0
-    Af[n_inlet, n_inlet] = 1.0
-    bf[n_inlet] = T_inlet
-    return Af, bf
-
-def ModificarSistemaSolido(A_s_base, b_s_base, conec, Q, Tf, L_canos, P_canos, hc, hx, hy, Nx, Ny, mapa_proximidade, contagem_nos_por_canal):
-    """Adiciona o termo de troca convectiva volumétrica nos nós internos do sólido"""
-    A_s = A_s_base.copy().tolil() if sparse.issparse(A_s_base) else A_s_base.copy()
-    b_s = b_s_base.copy()
-    
-    for id_no, arestas_proximas in enumerate(mapa_proximidade):
-        i = id_no % Nx
-        j = id_no // Nx
-        
-        # Mantém intactas as condições de contorno originais da placa
-        if i == 0 or i == Nx-1 or j == 0 or j == Ny-1:
-            continue
-            
-        for id_aresta, dist in arestas_proximas:
-            qk = Q[id_aresta]
-            n1, n2 = conec[id_aresta]
-            n_in = n1 if qk >= 0 else n2
-            
-            Tf_canal = Tf[n_in]
-            Lk = L_canos[id_aresta]
-            Pk = P_canos[id_aresta]
-            num_nos_mapeados = contagem_nos_por_canal[id_aresta]
-            
-            if num_nos_mapeados > 0:
-                # O calor trocado é distribuído proporcionalmente ao volume da célula (hx * hy)
-                fator_volumetrico = (hc * Pk * Lk) / (num_nos_mapeados * hx * hy)
-                A_s[id_no, id_no] += fator_volumetrico
-                b_s[id_no]        += fator_volumetrico * Tf_canal
-                
-    return A_s.tocsc() if sparse.issparse(A_s) else A_s
-
-# =====================================================================
-# 3. CONFIGURAÇÃO E EXECUÇÃO PRINCIPAL
-# =====================================================================
-if __name__ == "__main__":
-    # Parâmetros Geométricos e Térmicos da Placa
-    Nx, Ny = 51, 26
-    Lx, Ly = 0.02, 0.01  # metros (2cm x 1cm)
-    hx, hy = Lx / (Nx - 1), Ly / (Ny - 1)
-    
-    k_solid = 0.25       
-    rho, cp, hc = 1000.0, 4184.0, 3000.0
-    T_inlet = 20.0
-    TL, TR = 10.0, 30.0
-    fonte_calor = 5.0e5
-
-    # 3.1 Resolução Hidráulica da Rede
-    Xno, conec = GeraGrafo(levels=3)
-    Xno = Xno * 0.001  # Conversão da escala da malha para metros
-    n_inlet, n_outlet = 0, len(Xno) - 1
-
-    # Correção do vetor C para garantir que seja unidimensional puro
-    C = AssemblyVectorC(conec, Xno)
-    C = np.array(C).flatten()  
-
-    A_h = AssemblyHidraulico(conec, C)
-    A_h_tilde = A_h.copy()
-    A_h_tilde[n_outlet, :] = 0.0
-    A_h_tilde[n_outlet, n_outlet] = 1.0
-
-    b_h = np.zeros(len(Xno))
-    b_h[n_inlet] = 1.0e-7  # Vazão imposta na entrada
-
-    pressures = np.linalg.solve(A_h_tilde, b_h)
-    
-    # CORREÇÃO DA ORDEM: conec, C, pressures conforme a assinatura do teu arquivo
-    Q = calc_vazao(conec, C, pressures)  
-
-    L_canos = CalcularComprimentos(Xno, conec)
-    D_canos = np.ones(len(conec)) * 100e-6  # canais com diâmetro de 100 µm
-    P_canos = np.pi * D_canos
-
-    # 3.2 Geração do Mapa de Proximidade (Algoritmo do Professor)
-    d_max = 1.5 * np.sqrt(hx**2 + hy**2) 
-    print(f"Gerando mapa de proximidade via cKDTree (d_max = {d_max:.4e} m)...")
-    mapa_proximidade = CreateMapDistance(Lx, Ly, Nx, Ny, Xno, conec, d_max)
-
-    # 3.3 Construção da Matriz de Condução Base da Placa
-    x_coords = np.linspace(0, Lx, Nx)
-    TB = 10 + 20 * (x_coords / Lx)
-    TT = 10 + 20 * (x_coords / Lx)
-    A_s_base, b_s_base = CriarSistemaSolidoBase(Nx, Ny, Lx, Ly, k_solid, TL, TR, TB, TT, fonte_calor)
-    A_s_base_sparse = sparse.csc_matrix(A_s_base)
-
-    # 3.4 Loop Iterativo de Acoplamento Térmico (Gauss-Seidel entre Sistemas)
-    nunk = Nx * Ny
-    T_solid_flat = np.ones(nunk) * T_inlet 
-    T_fluid = np.ones(len(Xno)) * T_inlet
-    TOL, MAX_ITER = 1e-5, 200
-    erro, iteracao = 1.0, 0
-
-    print("\nIniciando acoplamento térmico...")
-    while erro > TOL and iteracao < MAX_ITER:
-        T_solid_old = T_solid_flat.copy()
-        
-        # Passo A: Fluido vê o sólido através do mapa e calcula suas novas temperaturas
-        T_s_canais, contagem_nos = ObterTemperaturaSolidoNosCanais(conec, T_solid_flat, mapa_proximidade)
-        Af, bf = AssemblyTermicoFluido(Xno, conec, Q, L_canos, P_canos, T_s_canais, rho, cp, hc, T_inlet, n_inlet)
-        T_fluid = np.linalg.solve(Af, bf)
-        
-        # Passo B: Sólido recebe a energia dos canais e calcula sua nova distribuição térmica
-        A_s_mod = ModificarSistemaSolido(A_s_base_sparse, b_s_base, conec, Q, T_fluid, L_canos, P_canos, hc, hx, hy, Nx, Ny, mapa_proximidade, contagem_nos)
-        T_solid_flat = spsolve(A_s_mod, b_s_base)
-        
-        erro = np.max(np.abs(T_solid_flat - T_solid_old))
-        iteracao += 1
-        if iteracao % 5 == 0 or erro <= TOL:
-            print(f"Iteração: {iteracao:<4} | Erro Máximo: {erro:.4e}")
-
-    # 3.5 Visualização do Resultado Final
-    T_placa_2D = T_solid_flat.reshape((Ny, Nx))
-    plt.figure(figsize=(10, 5))
-    plt.contourf(x_coords * 1000, np.linspace(0, Ly, Ny) * 1000, T_placa_2D, levels=50, cmap='jet')
-    plt.colorbar(label='Temperatura (°C)')
-    plt.title('Distribuição Térmica Final na Placa (Com Mapeamento por KD-Tree)')
-    plt.xlabel('X (mm)')
-    plt.ylabel('Y (mm)')
-    plt.tight_layout()
-    plt.show()
-
-# Supondo que 'conec', 'Xno' e 'T_fluid' (temperatura nos nós do fluido) já existam no seu main...
-cenarios = [1, 10, 100, 1000]
-resultados_T = {}
-
-print("\n--- ANÁLISE DE CONVERGÊNCIA DE QUADRATURA (CAP 4, EX 3) ---")
-for N in cenarios:
-    T_medias, tempo = calcular_temperatura_media_arestas(conec, Xno, T_fluid, num_subintervalos=N)
-    resultados_T[N] = T_medias
-    print(f"Subintervalos: {N:<4} | Tempo: {tempo:.6f} s | Média Global: {np.mean(T_medias):.4f} °C")
-
-# Estratégia matemática para estimativa do erro (Critério de Cauchy contra N=1000)
-print("\n--- ESTIMATIVA DE ERRO ABSOLUTO MÉDIO ---")
-for N in [1, 10, 100]:
-    erro_estimado = np.mean(np.abs(resultados_T[N] - resultados_T[1000]))
-    print(f"Configuração N={N:<3} -> Erro Médio Estimado: {erro_estimado:.6e} °C")
-
-# Plota o resultado cromático final para a melhor configuração (N=1000)
-plot_arestas_cromaticas_hidraulics(
-    conec, Xno, 
-    T_nodes=T_fluid, 
-    T_arestas=resultados_T[1000], 
-    titulo="Temperatura Média nas Arestas (Trapézio Composto N=1000)"
-)
-
-# =====================================================================
-# EXERCÍCIO 1 PARTE 2 - SEÇÃO 4.3.3: INFLUÊNCIA DA CONDUTIVIDADE VARIÁVEL
-# =====================================================================
-import time
-import numpy as np
-import matplotlib.pyplot as plt
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
+from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import griddata
+import time
+import pandas as pd
 
+from functionsHT import (ObterCondutividadeFaces_ViaNos, CriarSistemaSolidoCondutividadeVariavel,
+                         calcular_temperatura_media_arestas, calcular_temperatura_media_arestas_ponto_medio,
+                         atualiza_condutancias, plot_nos_cromaticos_hidraulica, plot_arestas_cromaticas_hidraulics, 
+                         calcular_viscosidade)
 
-from functionsHT import ObterCondutividadeFaces, CriarSistemaSolidoCondutividadeVariavel
- from functions import GeraGrafo 
+from functions import SolveNetwork, calc_vazao, calc_potencia, GeraGrafo, Assembly as AssemblyHidraulico
 
-print("\n" + "="*50)
-print("INICIANDO EXERCÍCIO 1: ANÁLISE PARAMÉTRICA DE D_MAX E MALHAS")
-print("="*50)
+# -----------------------------------------------------------------------------
+# CÓDIGO BASE - define os parâmetros da placa e executa as funções base
+# -----------------------------------------------------------------------------
 
-# Parâmetros atualizados da Seção 4.1
-Lx, Ly = 0.03, 0.015         # 3cm x 1.5cm
-k_0 = 0.25                   
-fonte_calor = 5.0e5          
+# Parâmetros geométricos da placa
+Lx, Ly = 0.03, 0.015
+k_0 = 0.25
+fonte_calor = 5.0e5
 TL, TR = 10.0, 30.0
-R_incl = 0.0025              # Raio de 0.25 cm
-xincl, yincl = 0.02 + R_incl, 0.0075  # Centro em (2+R, 0.75) cm
-TC = 35.0                    # Temperatura do círculo
 
-# Cenários exigidos
-lista_malhas = [(61, 31), (121, 61), (241, 121)]
-lista_dmax = [0.00025, 0.0005, 0.001]
+# Parâmetros da inclusão circular
+R_incl = 0.0025
+xincl, yincl = 0.02 + R_incl, 0.0075
+TC = 35.0
 
-# Obtenção da Rede (assumimos que foi gerada na Seção 3.1 com levels=3)
-# Reescale a rede se necessário para o novo Lx, Ly da placa
+# Parâmetros geométricos e operacionais dos microcanais
+Area_canal = 2.5e-7  # 500 um x 500 um
+Q_in_0 = 1.0e-7      # 0.1 mL/s (Inlet nó 0)
+Q_in_175 = 1.0e-6    # 1.0 mL/s (Inlet nó 175)
+
+# Construção da topologia da rede hidráulica fractal
 Xno, conec = GeraGrafo(levels=3)
-Xno = Xno * 0.001
-Xno[:,1] += 0.5 * Ly  # Centralizar em Y se necessário (depende da sua rede)
+Xno = Xno * 0.001       # Conversão de mm para metros
+Xno[:, 1] += 0.5 * Ly   # Centralização geométrica no eixo Y da placa
 
-for (Nx, Ny) in lista_malhas:
-    for d_max_val in lista_dmax:
-        print(f"\n-> Analisando Malha ({Nx}x{Ny}) com d_max = {d_max_val}")
-        t_inicio = time.time()
+# Nós de controle de contorno hidráulico
+n_inlet_0 = 0
+n_inlet_175 = 175
+n_outlet = 5 
+
+# Resolução da hidráulica nominal invariante (Caso Isotérmico de Referência a T = 20°C)
+mu_iso = calcular_viscosidade(20.0)
+D_h = np.sqrt(4 * Area_canal / np.pi)
+
+C_iso = np.zeros(len(conec))
+for k in range(len(conec)):
+    Lk = np.linalg.norm(Xno[int(conec[k,1])] - Xno[int(conec[k,0])])
+    C_iso[k] = (np.pi * D_h**4) / (128 * mu_iso * Lk)
+    
+A_h = AssemblyHidraulico(conec, C_iso)
+A_h_tilde = A_h.copy()
+A_h_tilde[n_outlet, :] = 0.0
+A_h_tilde[n_outlet, n_outlet] = 1.0
+
+b_h = np.zeros(len(Xno))
+b_h[n_inlet_0] = Q_in_0
+b_h[n_inlet_175] = Q_in_175
+
+pressures_iso = np.linalg.solve(A_h_tilde, b_h)
+P_max_iso = np.max(pressures_iso)
+
+print("=" * 80)
+print("INICIALIZAÇÃO DO ACOMPLAMENTO HIDRÁULICO-TÉRMICO")
+print("=" * 80)
+
+print(f"Pressão Máxima Isotérmica Base calculada: {P_max_iso:.2f} Pa\n")
+
+# -----------------------------------------------------------------------------
+# EXERCÍCIO 1, PARTE 1
+# -----------------------------------------------------------------------------
+
+# Exercício teórico, deve ser colocado na apresentação.
+
+# -----------------------------------------------------------------------------
+# EXERCÍCIO 2, PARTE 1
+# -----------------------------------------------------------------------------
+
+print("=" * 80)
+print("ANÁLISE DE INTERPOLAÇÃO 2D")
+print("=" * 80)
+
+Xno_base, conec = GeraGrafo(levels=3)
+Xno = Xno_base * 0.001 
+Xno[:, 1] = Xno[:, 1] + Ly/2  # Ajuste de offset de Y
+
+# DEFINIÇÃO DA MALHA GROSSEIRA EXIGIDA (61 x 31)
+Nx_coarse, Ny_coarse = 61, 31  
+x_coarse = np.linspace(0, Lx, Nx_coarse)
+y_coarse = np.linspace(0, Ly, Ny_coarse)
+X_coarse, Y_coarse = np.meshgrid(x_coarse, y_coarse, indexing='ij')
+pts_coarse = np.column_stack([X_coarse.ravel(), Y_coarse.ravel()])
+
+métodos = ['linear', 'cubic', 'nearest']
+
+# ---------------------------------------------
+# CASO A: Base de Referência com Malha Exata (241 x 121)
+# ---------------------------------------------
+Nx_ref, Ny_ref = 241, 121
+d_max_ref = 0.0005
+
+x_ref_coords = np.linspace(0, Lx, Nx_ref)
+y_ref_coords = np.linspace(0, Ly, Ny_ref)
+TB_ref = 10.0 + 20.0 * (x_ref_coords / Lx)
+TT_ref = 10.0 + 20.0 * (x_ref_coords / Lx)
+
+k_e_ref, k_n_ref = ObterCondutividadeFaces_ViaNos(Nx_ref, Ny_ref, Lx, Ly, Xno, conec, d_max_ref, k_0)
+A_s_ref, b_s_ref = CriarSistemaSolidoCondutividadeVariavel(
+    Nx_ref, Ny_ref, Lx, Ly, k_e_ref, k_n_ref, TL, TR, TB_ref, TT_ref, fonte_calor, R_incl, xincl, yincl, TC
+)
+T_solid_ref = spsolve(sparse.csr_matrix(A_s_ref), b_s_ref)
+
+data_ref = T_solid_ref.reshape((Ny_ref, Nx_ref)).T
+T_min_ref, T_max_ref = np.min(T_solid_ref), np.max(T_solid_ref)
+
+figA_cont, axesA_cont = plt.subplots(1, 3, figsize=(15, 6), constrained_layout=True)
+figA_cont.suptitle(f"Caso A (Malha Exata 241x121) - Contornos projetados na Grade {Nx_coarse}x{Ny_coarse}", fontweight='bold', fontsize=13)
+
+figA_graf, axesA_graf = plt.subplots(1, 3, figsize=(15, 6), constrained_layout=True)
+figA_graf.suptitle("Caso A (Malha Exata 241x121) - Temperaturas nos Nós Hidráulicos", fontweight='bold', fontsize=13)
+
+for idx, método in enumerate(métodos):
+    interp_ref = RegularGridInterpolator((x_ref_coords, y_ref_coords), data_ref, method=método, bounds_error=False, fill_value=None)
+    
+    # 1. Contorno
+    temps_coarse = interp_ref(pts_coarse).reshape(Nx_coarse, Ny_coarse)
+    temps_coarse = np.clip(temps_coarse, T_min_ref, T_max_ref)
+    
+    cp = axesA_cont[idx].contourf(x_coarse, y_coarse, temps_coarse.T, levels=40, cmap='jet')
+    axesA_cont[idx].set_title(f"Interpolação: {método.capitalize()}", fontsize=11)
+    axesA_cont[idx].set_xlabel("X (m)")
+    axesA_cont[idx].set_ylabel("Y (m)")
+    axesA_cont[idx].set_aspect('equal')
+    
+    # 2. Grafo Nodal
+    T_nodes_hyd_ref = interp_ref(Xno)
+    T_nodes_hyd_ref = np.clip(T_nodes_hyd_ref, T_min_ref, T_max_ref)
+    
+    sc = plot_nos_cromaticos_hidraulica(conec, Xno, T_nodes_hyd_ref, método, Nx_ref, Ny_ref, ax=axesA_graf[idx])
+    axesA_graf[idx].set_title(f"Método: {método.capitalize()}", fontsize=11)
+    axesA_graf[idx].set_aspect('equal')
+
+cbarA_cont = figA_cont.colorbar(cp, ax=axesA_cont.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
+cbarA_cont.set_label('Temperatura (°C)', fontsize=11)
+
+cbarA_graf = figA_graf.colorbar(sc, ax=axesA_graf.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
+cbarA_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
+
+plt.show()
+
+# ---------------------------------------------------
+# CASO B: Solução Base com Malha Grosseira (61 x 31)
+# ---------------------------------------------------
+
+Nx_61, Ny_61 = 61, 31
+d_max_61 = 0.0005
+
+x_61_coords = np.linspace(0, Lx, Nx_61)
+y_61_coords = np.linspace(0, Ly, Ny_61)
+TB_61 = 10.0 + 20.0 * (x_61_coords / Lx)
+TT_61 = 10.0 + 20.0 * (x_61_coords / Lx)
+
+k_e_61, k_n_61 = ObterCondutividadeFaces_ViaNos(Nx_61, Ny_61, Lx, Ly, Xno, conec, d_max_61, k_0)
+A_s_61, b_s_61 = CriarSistemaSolidoCondutividadeVariavel(
+    Nx_61, Ny_61, Lx, Ly, k_e_61, k_n_61, TL, TR, TB_61, TT_61, fonte_calor, R_incl, xincl, yincl, TC
+)
+T_solid_61 = spsolve(sparse.csr_matrix(A_s_61), b_s_61)
+
+data_61 = T_solid_61.reshape((Ny_61, Nx_61)).T
+T_min_61, T_max_61 = np.min(T_solid_61), np.max(T_solid_61)
+
+figB_cont, axesB_cont = plt.subplots(1, 3, figsize=(15, 6), constrained_layout=True)
+figB_cont.suptitle(f"Caso B (Malha Grosseira 61x31) - Contornos projetados na Grade {Nx_coarse}x{Ny_coarse}", fontweight='bold', fontsize=13)
+
+figB_graf, axesB_graf = plt.subplots(1, 3, figsize=(15, 6), constrained_layout=True)
+figB_graf.suptitle("Caso B (Malha Grosseira 61x31) - Temperaturas nos Nós Hidráulicos", fontweight='bold', fontsize=13)
+
+for idx, método in enumerate(métodos):
+    interp_61 = RegularGridInterpolator((x_61_coords, y_61_coords), data_61, method=método, bounds_error=False, fill_value=None)
+    
+    # 1. Contorno
+    temps_coarse_61 = interp_61(pts_coarse).reshape(Nx_coarse, Ny_coarse)
+    temps_coarse_61 = np.clip(temps_coarse_61, T_min_61, T_max_61)
+    
+    cp61 = axesB_cont[idx].contourf(x_coarse, y_coarse, temps_coarse_61.T, levels=40, cmap='jet')
+    axesB_cont[idx].set_title(f"Interpolação: {método.capitalize()}", fontsize=11)
+    axesB_cont[idx].set_xlabel("X (m)")
+    axesB_cont[idx].set_ylabel("Y (m)")
+    axesB_cont[idx].set_aspect('equal')
+    
+    # 2. Grafo Nodal
+    T_nodes_hyd_61 = interp_61(Xno)
+    T_nodes_hyd_61 = np.clip(T_nodes_hyd_61, T_min_61, T_max_61)
+    
+    sc61 = plot_nos_cromaticos_hidraulica(conec, Xno, T_nodes_hyd_61, método, Nx_61, Ny_61, ax=axesB_graf[idx])
+    axesB_graf[idx].set_title(f"Método: {método.capitalize()}", fontsize=11)
+    axesB_graf[idx].set_aspect('equal')
+
+cbarB_cont = figB_cont.colorbar(cp61, ax=axesB_cont.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
+cbarB_cont.set_label('Temperatura (°C)', fontsize=11)
+
+cbarB_graf = figB_graf.colorbar(sc61, ax=axesB_graf.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
+cbarB_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
+
+plt.show()
+
+# -----------------------------------------------------------------------------
+# EXERCÍCIO 3, PARTE 1
+# -----------------------------------------------------------------------------
+
+print("\n" + "=" * 80)
+print("ACOPLAMENTO HIDRO-TÉRMICO NO GRAFO")
+print("=" * 80)
+
+subintervalos = [1, 10, 100, 1000]
+resultados = []
+T_arestas_final = None
+
+for N in subintervalos:
+    # 1. Trapézio (Utiliza a função nativa que já está no seu functionsHT.py)
+    T_trap, t_trap = calcular_temperatura_media_arestas(
+        conec, Xno, T_solid_ref, int(Nx_ref), int(Ny_ref), Lx, Ly, num_subintervalos=N
+    )
+    
+    # 2. Ponto Médio (Utiliza a função definida acima)
+    T_mid, t_mid = calcular_temperatura_media_arestas_ponto_medio(
+        conec, Xno, T_solid_ref, int(Nx_ref), int(Ny_ref), Lx, Ly, num_subintervalos=N
+    )
+    
+    resultados.append({
+        'N': N,
+        'T_trap': np.mean(T_trap),
+        'T_mid': np.mean(T_mid),
+        't_trap': t_trap,
+        't_mid': t_mid
+    })
+    
+    # Adota N=1000 do Trapézio como modelo físico consolidado para prosseguir
+    if N == 1000:
+        T_arestas_final = T_trap  
+
+# Assume a discretização máxima (N=1000) como solução de referência "exata"
+T_ref = resultados[-1]['T_trap']
+
+# --- IMPRESSÃO DA TABELA 1: RESULTADOS NUMÉRICOS E ESTIMATIVA DE ERRO ---
+print("\n" + "-" * 95)
+print(" TABELA 1: RESULTADOS NUMÉRICOS E ESTIMATIVA DE ERRO (|T_N - T_1000|)")
+print("-" * 95)
+print(f"{'N':<6} | {'T_Média (Trapézio)':<20} | {'Erro (Trapézio)':<15} | {'T_Média (Ponto Médio)':<22} | {'Erro (Ponto Médio)'}")
+print("-" * 95)
+for res in resultados:
+    erro_trap = abs(res['T_trap'] - T_ref)
+    erro_mid = abs(res['T_mid'] - T_ref)
+    print(f"{res['N']:<6} | {res['T_trap']:<18.6f}   | {erro_trap:<15.2e} | {res['T_mid']:<20.6f}   | {erro_mid:.2e}")
+print("-" * 95)
+
+# --- IMPRESSÃO DA TABELA 2: TEMPO COMPUTACIONAL ---
+print("\n" + "-" * 60)
+print(" TABELA 2: COMPARAÇÃO DO TEMPO COMPUTACIONAL (s)")
+print("-" * 60)
+print(f"{'N':<6} | {'Tempo Trapézio (s)':<20} | {'Tempo Ponto Médio (s)'}")
+print("-" * 60)
+for res in resultados:
+    print(f"{res['N']:<6} | {res['t_trap']:<20.4e} | {res['t_mid']:.4e}")
+print("-" * 60 + "\n")
+
+C_acoplado = atualiza_condutancias(conec, Xno, T_arestas_final, Area_canal)
+
+A_h_mod = AssemblyHidraulico(conec, C_acoplado)
+A_h_mod_tilde = A_h_mod.copy()
+
+# Aplica as condições de contorno de saída
+A_h_mod_tilde[n_outlet, :] = 0.0
+A_h_mod_tilde[n_outlet, n_outlet] = 1.0
+
+pressures_mod = np.linalg.solve(A_h_mod_tilde, b_h)
+P_max_mod = np.max(pressures_mod)
+
+print("-" * 80)
+print(f"Pressão Máxima (Isotérmica):          {P_max_iso:.2f} Pa")
+print(f"Pressão Máxima (Acoplada Corrigida):  {P_max_mod:.2f} Pa")
+print(f"Variação da Perda de Carga Realizada: {((P_max_mod - P_max_iso)/P_max_iso)*100:.2f}%")
+print("-" * 80)
+
+# Renderização dos perfis de controle térmico do fluido
+plot_arestas_cromaticas_hidraulics(conec, Xno, T_arestas_final, titulo="Distribuição Térmica Integrada nas Arestas da Rede (N=1000)")
+
+# -----------------------------------------------------------------------------
+# EXERCÍCIO 4, PARTE 1
+# -----------------------------------------------------------------------------
+
+print("\n" + "="*75)
+print("EXERCÍCIO 4 - CAPÍTULO 4: REDE HIDRÁULICA COM C(T)")
+print("="*75)
+# Importações estritamente dos arquivos de funções (Sem duplicidades)
+import pandas as pd
+from scipy.interpolate import RegularGridInterpolator
+from matplotlib.collections import LineCollection
+from functionsHT import CriarSistemaSolidoCondutividadeVariavel, atualiza_condutancias
+from functions import SolveNetwork, calc_potencia, GeraGrafo
+# Parâmetros Geométricos e Físicos Locais do Exercício 4
+Lx_ex4, Ly_ex4 = 0.03, 0.015
+k_0_ex4 = 0.25
+fonte_calor_ex4 = 5.0e5
+TL_ex4, TR_ex4 = 10.0, 30.0
+R_incl_ex4 = 0.0025
+xincl_ex4, yincl_ex4 = 0.02 + R_incl_ex4, 0.0075
+TC_ex4 = 35.0
+Area_canal_ex4 = 2.5e-7
+# Construção da Rede Hidráulica Isolada do Exercício 4
+Xno_ex4, conec_ex4 = GeraGrafo(levels=3)
+Xno_ex4 = Xno_ex4 * 0.001
+Xno_ex4[:, 1] += 0.5 * Ly_ex4  # Centraliza a rede em Y dentro da placa
+# Condições de contorno da rede hidráulica (Mapeamento via strings)
+ps_hid_ex4 = {"6": 0.0}
+Qs_hid_ex4 = {"1": 1.0e-7, "176": 1.0e-6}
+lista_malhas_termicas = [(61, 31), (241, 121)]
+lista_metodos = ["ponto_medio", "trapezio"]
+lista_subintervalos = [1, 10, 100, 1000]
+resultados_ex4 = []
+T_arestas_final_ex4 = None  
+interpolador_final_ex4 = None
+# Loop de Varredura das Malhas, Métodos e Subintervalos
+for Nx, Ny in lista_malhas_termicas:
+    print(f"\n--- Resolvendo campo térmico na malha {Nx} x {Ny} ---")
+    x_coords = np.linspace(0.0, Lx_ex4, Nx)
+    y_coords = np.linspace(0.0, Ly_ex4, Ny)
+    TB = 10.0 + 20.0 * (x_coords / Lx_ex4)
+    TT = 10.0 + 20.0 * (x_coords / Lx_ex4)
+    k_e = np.ones((Nx - 1, Ny)) * k_0_ex4
+    k_n = np.ones((Nx, Ny - 1)) * k_0_ex4
+    # Montagem e resolução térmica usando as funções originais
+    A_T, b_T = CriarSistemaSolidoCondutividadeVariavel(
+        Nx, Ny, Lx_ex4, Ly_ex4, k_e, k_n, TL_ex4, TR_ex4, TB, TT, 
+        fonte_calor_ex4, R_incl_ex4, xincl_ex4, yincl_ex4, TC_ex4
+    )
+    T_flat_ex4 = spsolve(sparse.csr_matrix(A_T), b_T)
+    # Construção do Interpolador usando a função padrão da biblioteca
+    T_matriz_interp = T_flat_ex4.reshape((Ny, Nx)).T
+    interpolador_T = RegularGridInterpolator((x_coords, y_coords), T_matriz_interp, method="linear", bounds_error=False, fill_value=np.nan)
+    for metodo in lista_metodos:
+        for nsub in lista_subintervalos:
+            # 1. Cálculo da Temperatura média nas arestas
+            T_arestas = np.zeros(len(conec_ex4))
+            for k in range(len(conec_ex4)):
+                p1, p2 = Xno_ex4[int(conec_ex4[k, 0])], Xno_ex4[int(conec_ex4[k, 1])]
+                if metodo == "trapezio":
+                    s = np.linspace(0, 1, nsub + 1)
+                    pts = p1 + np.outer(s, p2 - p1)
+                    T_arestas[k] = np.trapezoid(interpolador_T(pts), x=s)
+                elif metodo == "ponto_medio":
+                    s = np.linspace(0.5 / nsub, 1 - 0.5 / nsub, nsub)
+                    pts = p1 + np.outer(s, p2 - p1)
+                    T_arestas[k] = np.mean(interpolador_T(pts))
+            # Guarda o estado da malha mais refinada para compor o gráfico final
+            if Nx == 241 and metodo == "trapezio" and nsub == 1000:
+                T_arestas_final_ex4 = T_arestas.copy()
+                interpolador_final_ex4 = interpolador_T
+            # 2. Atualização das condutâncias hidráulicas baseadas em T_arestas
+            C_T = atualiza_condutancias(conec_ex4, Xno_ex4, T_arestas, Area_canal_ex4)
+            # 3. Solução do escoamento na rede hidráulica
+            pressure_T = SolveNetwork(conec_ex4, C_T, ps=ps_hid_ex4, Qs=Qs_hid_ex4)
+            # 4. Cálculo da Potência dissipada
+            W_T = calc_potencia(conec_ex4, C_T, pressure_T)
+            resultados_ex4.append({
+                "malha_termica": f"{Nx}x{Ny}",
+                "metodo_quadratura": metodo,
+                "nsub": nsub,
+                "T_aresta_min": np.min(T_arestas),
+                "T_aresta_media": np.mean(T_arestas),
+                "T_aresta_max": np.max(T_arestas),
+                "pressao_max": np.max(pressure_T),
+                "pressao_min": np.min(pressure_T),
+                "potencia_total": W_T
+            })
+# Backup de contingência
+if T_arestas_final_ex4 is None:
+    T_arestas_final_ex4 = T_arestas.copy()
+    interpolador_final_ex4 = interpolador_T
+# ---------------------------------------------------------------------
+# Geração das Tabelas ASCII Formatadas
+# ---------------------------------------------------------------------
+df_ex4 = pd.DataFrame(resultados_ex4)
+print("\n" + "="*85)
+print(" TABELA DE RESULTADOS FÍSICOS (TEMPERATURAS E PRESSÃO)")
+print("="*85)
+print(f"{'Malha':<10} | {'Método':<12} | {'N':<5} | {'T_Min (°C)':<12} | {'T_Média (°C)':<12} | {'T_Max (°C)':<12} | {'P_Max (Pa)'}")
+print("-" * 85)
+for res in resultados_ex4:
+    print(f"{res['malha_termica']:<10} | {res['metodo_quadratura']:<12} | {res['nsub']:<5} | "
+          f"{res['T_aresta_min']:<12.4f} | {res['T_aresta_media']:<12.4f} | {res['T_aresta_max']:<12.4f} | {res['pressao_max']:.2f}")
+print("-" * 85)
+# ---------------------------------------------------------------------
+# ADAPTAÇÃO EXATA DO SEU SNIPPET COM GRÁFICO CORRIGIDO (ESTILO WHATSAPP)
+# ---------------------------------------------------------------------
+# 1. Cálculo das temperaturas nos nós usando o seu laço original de interpolação
+T_nodes_plot = np.zeros(len(Xno_ex4))
+for i in range(len(Xno_ex4)):
+    T_nodes_plot[i] = interpolador_final_ex4([Xno_ex4[i]])[0]
+# 2. Montagem customizada do plot para sobrepor linhas coloridas E nós coloridos
+fig, ax = plt.subplots(figsize=(10, 55 / 11)) # Mantém proporção da tela
+# Mapeando os segmentos das arestas
+segmentos = []
+for k in range(len(conec_ex4)):
+    n1, n2 = int(conec_ex4[k, 0]), int(conec_ex4[k, 1])
+    segmentos.append((Xno_ex4[n1], Xno_ex4[n2]))
+# Define os limites de cor baseados nos dados (casando perfeitamente com a barra lateral)
+norm = plt.Normalize(vmin=10.0, vmax=65.0)
+# Plota as Arestas Coloridas
+lc = LineCollection(segmentos, cmap='jet', norm=norm, linewidths=2.5, zorder=1)
+lc.set_array(T_arestas_final_ex4)
+ax.add_collection(lc)
+# COMPONENTES CORRIGIDOS: Plota os Nós como círculos coloridos com contorno preto
+sc = ax.scatter(
+    Xno_ex4[:, 0], Xno_ex4[:, 1],
+    c=T_nodes_plot,
+    cmap='jet',
+    norm=norm,
+    s=35,                  # Tamanho ideal para visualização dos círculos
+    zorder=2,              # Garante que os nós fiquem por cima das linhas
+    edgecolors='black',    # Contorno preto idêntico à imagem de referência
+    linewidths=0.6
+)
+# Adiciona a Barra de Cores (Colorbar)
+cbar = fig.colorbar(lc, ax=ax)
+cbar.set_label('Temperatura (°C)', fontsize=11)
+# Configurações de eixos e títulos idênticas à imagem correta
+ax.set_title("Exercício 4 - Temperatura média nas arestas da rede hidráulica", fontsize=12, fontweight='bold')
+ax.set_xlabel('Posição X (m)', fontsize=10)
+ax.set_ylabel('Posição Y (m)', fontsize=10)
+ax.grid(True, linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+
+# -----------------------------------------------------------------------------
+# EXERCÍCIO 1, PARTE 1
+# -----------------------------------------------------------------------------
+
+print("\n" + "="*75)
+print("CONDUTIVIDADE MODIFICADA POR PROXIMIDADE")
+print("="*75)
+
+# Construção e posicionamento da Rede Hidráulica utilizando suas variáveis globais
+Xno_ex5, conec_ex5 = GeraGrafo(levels=3)
+Xno_ex5 = Xno_ex5 * 0.001
+Xno_ex5[:, 1] += 0.5 * Ly  # Centraliza a rede verticalmente na placa utilizando o Ly global
+# Cenários de Varredura Paramétrica solicitados pelo enunciado
+lista_malhas_ex5 = [(61, 31), (121, 61), (241, 121)]
+lista_dmax_ex5 = [0.00025, 0.0005, 0.001]
+resultados_ex5 = []
+# Loop de Varredura pelas Malhas Computacionais
+for Nx, Ny in lista_malhas_ex5:
+    print(f"\n" + "-"*60)
+    print(f"Executando Refinamento Espacial: Malha {Nx} x {Ny}")
+    print("-"*60)
+    
+    x_coords = np.linspace(0.0, Lx, Nx)
+    y_coords = np.linspace(0.0, Ly, Ny)
+    
+    # Condições de contorno lineares para as bases inferior e superior (usando Lx global)
+    TB = 10.0 + 20.0 * (x_coords / Lx)
+    TT = 10.0 + 20.0 * (x_coords / Lx)
+    
+    # Determinação dos índices para os perfis unidimensionais estratégicos
+    j_mid = Ny // 2  # Linha horizontal central (y ≈ 0.0075 m)
+    i_secao = int(np.argmin(np.abs(x_coords - xincl)))  # Linha vertical sobre o centro da inclusão global
+    perfis_horizontais = {}
+    perfis_verticais = {}
+    for d_max in lista_dmax_ex5:
+        print(f" -> Calculando cenário para d_max = {d_max} m...")
+        t_inicio = time.perf_counter()
+        # 1. Cálculo das condutividades nas interfaces utilizando as variáveis globais
+        t_geom0 = time.perf_counter()
+        k_e_grid, k_n_grid = ObterCondutividadeFaces_ViaNos(
+            Nx, Ny, Lx, Ly, Xno_ex5, conec_ex5, d_max, k_0
+        )
+        t_geom = time.perf_counter() - t_geom0
+        # 2. Montagem do Sistema Linear Térmico com as variáveis globais do topo do arquivo
+        t_mont0 = time.perf_counter()
+        A_T, b_T = CriarSistemaSolidoCondutividadeVariavel(
+            Nx, Ny, Lx, Ly, k_e_grid, k_n_grid, TL, TR, TB, TT, 
+            fonte_calor, R_incl, xincl, yincl, TC
+        )
+        t_mont = time.perf_counter() - t_mont0
+        # 3. Solução do Sistema Linear usando matriz esparsa
+        t_sol0 = time.perf_counter()
+        T_flat_ex5 = spsolve(sparse.csr_matrix(A_T), b_T)
+        t_sol = time.perf_counter() - t_sol0
         
-        # Borda Superior e Inferior dinâmicas: T = 10 + 20*(x/Lx)
-        x_coords = np.linspace(0, Lx, Nx)
-        y_coords = np.linspace(0, Ly, Ny)
-        TB = 10.0 + 20.0 * (x_coords / Lx)
-        TT = 10.0 + 20.0 * (x_coords / Lx)
-
-        # Etapa 1: Calcula o campo de condutividade nas faces
-        t0 = time.time()
-        k_e, k_n = ObterCondutividadeFaces(Nx, Ny, Lx, Ly, Xno, conec, d_max_val, k_0)
-        t_k = time.time() - t0
-
-        # Etapa 2: Montagem do sistema
-        t0 = time.time()
-        A_s, b_s = CriarSistemaSolidoCondutividadeVariavel(Nx, Ny, Lx, Ly, k_e, k_n, TL, TR, TB, TT, fonte_calor, R_incl, xincl, yincl, TC)
-        A_s_sparse = sparse.csr_matrix(A_s)
-        t_assembly = time.time() - t0
-
-        # Etapa 3: Resolução do sistema
-        t0 = time.time()
-        T_solid_flat = spsolve(A_s_sparse, b_s)
-        t_solve = time.time() - t0
+        t_total = time.perf_counter() - t_inicio
         
-        t_total = time.time() - t_inicio
-        T_max = np.max(T_solid_flat)
-        T_placa_2D = T_solid_flat.reshape((Ny, Nx))
-
-        print(f"   [Tempo] Calc k_faces: {t_k:.3f}s | Assembly: {t_assembly:.3f}s | Solve: {t_solve:.3f}s | Total: {t_total:.3f}s")
-        print(f"   [Resultado] Temperatura Máxima na Placa: {T_max:.2f} °C")
-
-        # --- GERAÇÃO DOS GRÁFICOS ---
-        fig = plt.figure(figsize=(15, 4))
+        # Redimensiona o vetor solução para a matriz 2D (Y, X)
+        T_matriz = T_flat_ex5.reshape((Ny, Nx))
+        # Extração e salvamento dos perfis unidimensionais
+        perfis_horizontais[d_max] = T_matriz[j_mid, :].copy()
+        perfis_verticais[d_max] = T_matriz[:, i_secao].copy()
+        # Registro das estatísticas e tempos medidos
+        resultados_ex5.append({
+            "malha": f"{Nx}x{Ny}",
+            "d_max": d_max,
+            "T_max": np.max(T_flat_ex5),
+            "T_min": np.min(T_flat_ex5),
+            "t_geometria": t_geom,
+            "t_montagem": t_mont,
+            "t_solucao": t_sol,
+            "t_total": t_total
+        })
+        # -----------------------------------------------------------------
+        # 4. GERAÇÃO DOS MAPAS DE CONTORNO 2D (LIMPO - CORES DOS NÓS VIA LOCAL T)
+        # -----------------------------------------------------------------
+        fig2d, ax2d = plt.subplots(figsize=(10, 5))
+        X_grid, Y_grid = np.meshgrid(x_coords, y_coords)
         
-        # 1. Mapa de contornos 2D
-        ax1 = plt.subplot(1, 3, 1)
-        cf = ax1.contourf(x_coords * 1000, y_coords * 1000, T_placa_2D, levels=50, cmap='jet')
-        plt.colorbar(cf, ax=ax1, label='T (°C)')
-        ax1.set_title(f'Mapa 2D ($d_{{max}}$={d_max_val})')
-        ax1.set_xlabel('X (mm)')
-        ax1.set_ylabel('Y (mm)')
-
-        # 2. Perfil Horizontal (Eixo Central em y = Ly/2)
-        ax2 = plt.subplot(1, 3, 2)
-        idx_y_mid = Ny // 2
-        ax2.plot(x_coords * 1000, T_placa_2D[idx_y_mid, :], 'r-', label=f'Y = {y_coords[idx_y_mid]*1000:.1f} mm')
-        ax2.set_title('Perfil Horizontal')
-        ax2.set_xlabel('X (mm)')
-        ax2.set_ylabel('T (°C)')
-        ax2.grid(True)
-        ax2.legend()
-
-        # 3. Perfil Vertical (Eixo Central em x = Lx/2)
-        ax3 = plt.subplot(1, 3, 3)
-        idx_x_mid = Nx // 2
-        ax3.plot(y_coords * 1000, T_placa_2D[:, idx_x_mid], 'b-', label=f'X = {x_coords[idx_x_mid]*1000:.1f} mm')
-        ax3.set_title('Perfil Vertical')
-        ax3.set_xlabel('Y (mm)')
-        ax3.set_ylabel('T (°C)')
-        ax3.grid(True)
-        ax3.legend()
-
+        # Preenchimento de contorno contínuo da temperatura da placa
+        cont = ax2d.contourf(X_grid, Y_grid, T_matriz, levels=30, cmap='jet')
+        ax2d.contour(X_grid, Y_grid, T_matriz, levels=15, colors='black', linewidths=0.3, alpha=0.3)
+        
+        # Desenha as linhas dos canais (arestas) em preto bem fino e suave
+        for k in range(len(conec_ex5)):
+            n1, n2 = int(conec_ex5[k, 0]), int(conec_ex5[k, 1])
+            ax2d.plot([Xno_ex5[n1, 0], Xno_ex5[n2, 0]], [Xno_ex5[n1, 1], Xno_ex5[n2, 1]], 
+                      color='black', linewidth=0.5, alpha=0.5, zorder=2)
+        
+        # Interpolação precisa da temperatura do sólido para os nós da rede
+        pontos_grade_termica = np.column_stack([X_grid.ravel(), Y_grid.ravel()])
+        valores_termicos = T_matriz.ravel()
+        T_nos_rede = griddata(pontos_grade_termica, valores_termicos, (Xno_ex5[:, 0], Xno_ex5[:, 1]), method='linear')
+        
+        # Correção de borda para nós nas extremidades exatas da grade
+        if np.any(np.isnan(T_nos_rede)):
+            T_nos_rede = griddata(pontos_grade_termica, valores_termicos, (Xno_ex5[:, 0], Xno_ex5[:, 1]), method='nearest')
+        # Desenha os nós aplicando de forma dinâmica a escala cromática 'jet' sincronizada com o fundo
+        sc = ax2d.scatter(
+            Xno_ex5[:, 0], Xno_ex5[:, 1], 
+            c='black', 
+            cmap='jet', 
+            vmin=T_matriz.min(), vmax=T_matriz.max(), 
+            s=18, 
+            marker='o', 
+            edgecolors='black', 
+            linewidths=0.5, 
+            zorder=3
+        )
+        
+        # Configurações da barra de cores vertical e eixos
+        cbar = fig2d.colorbar(cont, ax=ax2d, pad=0.02)
+        cbar.set_label('Temperatura (°C)', fontsize=10)
+        ax2d.set_title(f"Campo Térmico 2D - Malha {Nx}x{Ny} | $d_{{max}}$ = {d_max} m", fontsize=11, fontweight='bold')
+        ax2d.set_xlabel('Posição X (m)')
+        ax2d.set_ylabel('Posição Y (m)')
+        ax2d.set_aspect('equal')
         plt.tight_layout()
         plt.show()
+    # -----------------------------------------------------------------
+    # 5. PLOT DOS PERFIS UNIDIMENSIONAIS COMBINADOS (Por nível de malha)
+    # -----------------------------------------------------------------
+    fig_perf, ax_perf = plt.subplots(1, 2, figsize=(13, 4.8))
+    
+    # Gráfico Esquerdo: Perfil Horizontal Central
+    for d_max in lista_dmax_ex5:
+        ax_perf[0].plot(x_coords, perfis_horizontais[d_max], label=f"$d_{{max}}$ = {d_max} m", linewidth=1.8)
+    ax_perf[0].set_title(f"Perfil Horizontal (y = {y_coords[j_mid]:.4f} m)", fontsize=10, fontweight='bold')
+    ax_perf[0].set_xlabel('Posição X (m)')
+    ax_perf[0].set_ylabel('Temperatura (°C)')
+    ax_perf[0].grid(True, linestyle='--', alpha=0.5)
+    ax_perf[0].legend()
+    # Gráfico Direito: Perfil Vertical na Inclusão
+    for d_max in lista_dmax_ex5:
+        ax_perf[1].plot(y_coords, perfis_verticais[d_max], label=f"$d_{{max}}$ = {d_max} m", linewidth=1.8)
+    ax_perf[1].set_title(f"Perfil Vertical (x = {x_coords[i_secao]:.4f} m)", fontsize=10, fontweight='bold')
+    ax_perf[1].set_xlabel('Posição Y (m)')
+    ax_perf[1].set_ylabel('Temperatura (°C)')
+    ax_perf[1].grid(True, linestyle='--', alpha=0.5)
+    ax_perf[1].legend()
+    
+    plt.tight_layout()
+    plt.show()
+# =========================================================================
+# RELATÓRIO DE DESEMPENHO E ANÁLISE PARAMÉTRICA VIA TERMINAL
+# =========================================================================
+df_ex5 = pd.DataFrame(resultados_ex5)
+
+print("\n" + "="*100)
+print(" TABELA COMPARATIVA: TEMPERATURAS MÁXIMAS E TEMPOS DE PROCESSAMENTO COMPUTACIONAL")
+print("="*100)
+print(f"{'Malha':<10} | {'d_max (m)':<10} | {'T_Min (°C)':<12} | {'T_Max (°C)':<12} | {'t_Geom (s)':<10} | {'t_Solv (s)':<10} | {'t_Total (s)'}")
+print("-" * 100)
+for r in resultados_ex5:
+    print(f"{r['malha']:<10} | {r['d_max']:<10.5f} | {r['T_min']:<12.4f} | {r['T_max']:<12.4f} | "
+          f"{r['t_geometria']:<10.4f} | {r['t_solucao']:<10.4f} | {r['t_total']:.4f}")
+print("-" * 100)
+print("\nExercício 1 da Seção 4.3.3 executado com completo sucesso estrutural!")
