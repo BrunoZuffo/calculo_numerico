@@ -4,6 +4,7 @@ from scipy import sparse
 from scipy.sparse.linalg import spsolve
 from scipy.interpolate import RegularGridInterpolator
 from scipy.interpolate import griddata
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import time
 import pandas as pd
 
@@ -362,6 +363,8 @@ for Nx, Ny in lista_malhas_termicas:
             if Nx == 241 and metodo == "trapezio" and nsub == 1000:
                 T_arestas_final_ex4 = T_arestas.copy()
                 interpolador_final_ex4 = interpolador_T
+                pressure_final_ex4 = pressure_T.copy() # ADICIONADO: Salva o vetor de pressões
+                T_matriz_final_ex4 = T_flat_ex4.reshape((Ny, Nx)).copy() # ADICIONADO: Salva a matriz 2D de temperatura
             # 2. Atualização das condutâncias hidráulicas baseadas em T_arestas
             C_T = atualiza_condutancias(conec_ex4, Xno_ex4, T_arestas, Area_canal_ex4)
             # 3. Solução do escoamento na rede hidráulica
@@ -399,44 +402,59 @@ print("-" * 85)
 # ---------------------------------------------------------------------
 # ADAPTAÇÃO EXATA DO SEU SNIPPET COM GRÁFICO CORRIGIDO (ESTILO WHATSAPP)
 # ---------------------------------------------------------------------
-# 1. Cálculo das temperaturas nos nós usando o seu laço original de interpolação
-T_nodes_plot = np.zeros(len(Xno_ex4))
-for i in range(len(Xno_ex4)):
-    T_nodes_plot[i] = interpolador_final_ex4([Xno_ex4[i]])[0]
-# 2. Montagem customizada do plot para sobrepor linhas coloridas E nós coloridos
-fig, ax = plt.subplots(figsize=(10, 55 / 11)) # Mantém proporção da tela
-# Mapeando os segmentos das arestas
-segmentos = []
+# ---------------------------------------------------------------------
+# PLOTAGEM ACOPLADA: FUNDO (TEMPERATURA) + NÓS (PRESSÃO)
+# ---------------------------------------------------------------------
+fig, ax = plt.subplots(figsize=(12, 6))
+
+# 1. Contorno de Temperatura (Fundo)
+x_coords_plot = np.linspace(0.0, Lx_ex4, 241)
+y_coords_plot = np.linspace(0.0, Ly_ex4, 121)
+X_grid, Y_grid = np.meshgrid(x_coords_plot, y_coords_plot)
+
+# Plota o preenchimento de contorno termodinâmico
+cont = ax.contourf(X_grid, Y_grid, T_matriz_final_ex4, levels=40, cmap='jet')
+
+# 2. Arestas da Rede (Linhas Pretas Direcionais)
 for k in range(len(conec_ex4)):
     n1, n2 = int(conec_ex4[k, 0]), int(conec_ex4[k, 1])
-    segmentos.append((Xno_ex4[n1], Xno_ex4[n2]))
-# Define os limites de cor baseados nos dados (casando perfeitamente com a barra lateral)
-norm = plt.Normalize(vmin=10.0, vmax=65.0)
-# Plota as Arestas Coloridas
-lc = LineCollection(segmentos, cmap='jet', norm=norm, linewidths=2.5, zorder=1)
-lc.set_array(T_arestas_final_ex4)
-ax.add_collection(lc)
-# COMPONENTES CORRIGIDOS: Plota os Nós como círculos coloridos com contorno preto
+    ax.plot([Xno_ex4[n1, 0], Xno_ex4[n2, 0]], [Xno_ex4[n1, 1], Xno_ex4[n2, 1]], 
+            color='black', linewidth=0.6, zorder=2, alpha=0.8)
+
+# 3. Nós da Rede (Coloridos pela Pressão)
 sc = ax.scatter(
     Xno_ex4[:, 0], Xno_ex4[:, 1],
-    c=T_nodes_plot,
-    cmap='jet',
-    norm=norm,
-    s=35,                  # Tamanho ideal para visualização dos círculos
-    zorder=2,              # Garante que os nós fiquem por cima das linhas
-    edgecolors='black',    # Contorno preto idêntico à imagem de referência
-    linewidths=0.6
+    c=pressure_final_ex4,
+    cmap='coolwarm', 
+    s=40,
+    zorder=3,
+    edgecolors='black',
+    linewidths=0.8
 )
-# Adiciona a Barra de Cores (Colorbar)
-cbar = fig.colorbar(lc, ax=ax)
-cbar.set_label('Temperatura (°C)', fontsize=11)
-# Configurações de eixos e títulos idênticas à imagem correta
-ax.set_title("Exercício 4 - Temperatura média nas arestas da rede hidráulica", fontsize=12, fontweight='bold')
-ax.set_xlabel('Posição X (m)', fontsize=10)
-ax.set_ylabel('Posição Y (m)', fontsize=10)
-ax.grid(True, linestyle='--', alpha=0.5)
 
-plt.tight_layout()
+# Estilização Geométrica e Travamento de Escala
+ax.set_title("Contours of temperature", fontsize=12)
+ax.set_xlabel('x (m)', fontsize=10)
+ax.set_ylabel('y (m)', fontsize=10)
+ax.set_xlim(0, Lx_ex4)
+ax.set_ylim(0, Ly_ex4)
+ax.set_aspect('equal')
+
+# 4. Alocação Estrita das Barras de Cores (Desacoplamento)
+divider = make_axes_locatable(ax)
+
+# Barra Esquerda (Pressão) - pad desloca a barra para evitar o eixo Y
+cax_P = divider.append_axes("left", size="2.5%", pad=0.8)
+cbar_P = fig.colorbar(sc, cax=cax_P)
+cax_P.yaxis.set_ticks_position('left')
+cax_P.yaxis.set_label_position('left')
+cbar_P.set_label('Pressure, p', fontsize=10)
+
+# Barra Direita (Temperatura)
+cax_T = divider.append_axes("right", size="2.5%", pad=0.2)
+cbar_T = fig.colorbar(cont, cax=cax_T)
+cbar_T.set_label('Temperature, T', fontsize=10)
+
 plt.show()
 
 # -----------------------------------------------------------------------------
@@ -539,7 +557,7 @@ for Nx, Ny in lista_malhas_ex5:
         # Desenha os nós aplicando de forma dinâmica a escala cromática 'jet' sincronizada com o fundo
         sc = ax2d.scatter(
             Xno_ex5[:, 0], Xno_ex5[:, 1], 
-            c='black', 
+            c=T_nos_rede, 
             cmap='jet', 
             vmin=T_matriz.min(), vmax=T_matriz.max(), 
             s=18, 
