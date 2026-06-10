@@ -106,7 +106,7 @@ def calc_potencia (conec, C, pressure):
     return W
 
 #calculo condutancia - Victor Hugo
-def CalculoCondutancia(Lk):
+def CalculoCondutancia(Lk, H_k=None, mu=None):
     pi=np.pi
     Ak=2.5*10**(-7)
     mi=0.001
@@ -117,21 +117,41 @@ def CalculoCondutancia(Lk):
     return Ck
 
 #função que calcula o comprimento do cano k (Lk) para montar o vetor de condutancias C- Matheus
-def AssemblyVectorC(conec, Xno):
+#def AssemblyVectorC(conec, Xno):
+#    nc = len(conec)
+#    C = np.zeros(nc) #vetor de condutancias
+#
+#    for k in range (nc):
+#        n1 = conec[k,0]
+#        n2 = conec[k,1]
+#
+#        x1, y1 = Xno[n1,0], Xno[n1, 1]
+#        x2, y2 = Xno[n2,0], Xno[n2, 1]
+#
+#        Lk = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+#
+#        C[k] = CalculoCondutancia(Lk)
+#    
+#    return C
+
+def AssemblyVectorC(conec, Xno, H_k=None, mu=None):
     nc = len(conec)
-    C = np.zeros(nc) #vetor de condutancias
+    C = np.zeros(nc)
 
-    for k in range (nc):
-        n1 = conec[k,0]
-        n2 = conec[k,1]
+    for k in range(nc):
+        n1 = conec[k, 0]
+        n2 = conec[k, 1]
 
-        x1, y1 = Xno[n1,0], Xno[n1, 1]
-        x2, y2 = Xno[n2,0], Xno[n2, 1]
+        x1, y1 = Xno[n1, 0], Xno[n1, 1]
+        x2, y2 = Xno[n2, 0], Xno[n2, 1]
 
         Lk = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
-        C[k] = CalculoCondutancia(Lk)
-    
+        if H_k is None or mu is None:
+            C[k] = CalculoCondutancia(Lk)
+        else:
+            C[k] = CalculoCondutancia(Lk, H_k, mu)
+
     return C
 
 

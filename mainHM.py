@@ -4,7 +4,7 @@ from scipy import sparse
 # Importações dos seus arquivos base (CORRIGIDO: adicionado roda_exercicio_4)
 from functions import GeraGrafo, AssemblyVectorC, Assembly
 from functionsM import BuildMatrizes_Eigen_Circular
-from functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, roda_exercicio_4
+from functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, roda_exercicio_4, roda_exercicio_5
 
 # ==============================================================================
 # 1. PARÂMETROS FÍSICOS E ADIMENSIONAIS (Dados da Seção 5.2.5 do PDF)
@@ -111,7 +111,13 @@ for t in tempos:
 # ==============================================================================
 # 5. DISPARO DO EXERCÍCIO 4
 # ==============================================================================
-roda_exercicio_4(
+
+#roda_exercicio_4(
+#    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
+#    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
+#)
+
+roda_exercicio_5(
     Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
     Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
 )
