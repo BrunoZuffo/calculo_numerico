@@ -6,8 +6,10 @@ from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 
 def Assembly(conec: list[list], C: list):
-    conec = np.array(conec) - 1 # estamos convertendo conec em uma matriz numpy e fazendo decrementações em cada um dos indices para ficar mais pythonic
-    nv = conec.max() + 1 #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    #conec = np.array(conec) - 1 # estamos convertendo conec em uma matriz numpy e fazendo decrementações em cada um dos indices para ficar mais pythonic
+    conec = np.array(conec)
+    #nv = conec.max() + 1 #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
+    nv = int(conec.max() + 1)
     nc = len(conec) #simplesmente o tanto de linhas na matriz conec
     A = np.zeros(shape=(nv,nv)) #criando matriz com valores 0 em todas as posições
     for k in range(nc):
@@ -21,27 +23,30 @@ def Assembly(conec: list[list], C: list):
 
     return A
 
-def SolveNetwork(conec, C, natm, Qs):
-
-    natm = natm - 1
+def SolveNetwork(conec: list[list], C:list, ps=None, Qs=None):
     
-    Atilde = Assembly(conec,C) #recebe a matriz A
-    
-    Atilde[natm, :] = 0 #todas as colunas com linha natm recebem 0
-    Atilde[natm, natm] = 1 
-    
-    print(Atilde)
+    A = Assembly(conec, C)
+    Atilde = A.copy() #recebe a matriz A
 
-    n = Atilde.shape[0]
-
-    # vetor de termos independentes
+    n = A.shape[0]
     b = np.zeros(n)
 
-    # adicionar vazões injetadas
-    for node, q in Qs.items():
-        b[node] = q
+    if Qs is not None:
+        for node, value in Qs.items():
+            i = int(node) - 1
+            b[i] = value
 
-    # resolver sistema linear
+    if ps is not None:
+        for node, value in ps.items():
+            i = int(node) - 1
+
+            Atilde[i, :] = 0
+            Atilde[i, i] = 1
+            b[i] = value
+
+    #print("b:", b)    
+    #print(Atilde)
+
     pressure = np.linalg.solve(Atilde, b)
     return pressure
 
@@ -62,17 +67,20 @@ def createD (conec, nv,nc):
     D = np.zeros((nc,nv))
     for k in range (nc):
       for j in range (nv):
-        if j == conec [k][0]-1:
+        #if j == conec [k][0]-1:
+        if j == conec [k][0]:
           D[k][j] = 1
-        elif j == conec [k][1]-1:
+        #elif j == conec [k][1]-1:
+        elif j == conec [k][1]:
           D[k][j] = -1
 
     return D
 
 def calc_vazao (conec, C, pressure):
 
-    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
-    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+    #nv = conec.max() #o valor maximo da matriz conec é igual ao numero de nos
+    nv = int(conec.max() + 1)
+    nc = len(conec) #o numero de linhas da matriz conec é igual ao numero de canos
     # Q = KDp
 
     K = createK (C, nc)
@@ -86,8 +94,9 @@ def calc_vazao (conec, C, pressure):
 
 def calc_potencia (conec, C, pressure):
    
-    nv = conec.max() #pegando valor maximo dos nos e somando 1 por conta do indice reduzido anteriormente
-    nc = len(conec) #simplesmente o tanto de linhas na matriz conec
+    #nv = conec.max() #o valor maximo da matriz conec é igual ao numero de nos
+    nv = int(conec.max() + 1)
+    nc = len(conec) #o numero de linhas da matriz conec é igual ao numero de canos
 
     K = createK (C, nc)
     D = createD (conec, nv,nc)
@@ -107,10 +116,29 @@ def CalculoCondutancia(Lk):
 
     return Ck
 
+#função que calcula o comprimento do cano k (Lk) para montar o vetor de condutancias C- Matheus
+def AssemblyVectorC(conec, Xno):
+    nc = len(conec)
+    C = np.zeros(nc) #vetor de condutancias
+
+    for k in range (nc):
+        n1 = conec[k,0]
+        n2 = conec[k,1]
+
+        x1, y1 = Xno[n1,0], Xno[n1, 1]
+        x2, y2 = Xno[n2,0], Xno[n2, 1]
+
+        Lk = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+
+        C[k] = CalculoCondutancia(Lk)
+    
+    return C
+
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
 
-    edges = np.array(conec) - 1
+    #edges = np.array(conec) - 1
+    edges = np.array(conec)
     coord = Xno
     nv = np.max(edges) + 1
     nc = edges.shape[0]
@@ -237,8 +265,8 @@ def GeraGrafo(levels=3):
     nodes_data = []
     edges_raw = []
     node_id = 0
-    
-    spine_length = 6 
+
+    spine_length = 6
 
     # 1. Geração da Estrutura Base
     spine_nodes = []
@@ -247,12 +275,12 @@ def GeraGrafo(levels=3):
         spine_nodes.append(node_id)
         if i > 0: edges_raw.append((node_id - 1, node_id))
         node_id += 1
-        
+
     def add_fractal_branches(parent_id, px, py, angle, length, depth):
         nonlocal node_id
         if depth == 0: return
         angles = [angle + np.pi/6, angle - np.pi/6]
-        branch_len = length * 0.75 
+        branch_len = length * 0.75
         for a in angles:
             nx = px + branch_len * np.cos(a)
             ny = py + branch_len * np.sin(a)
@@ -269,7 +297,7 @@ def GeraGrafo(levels=3):
     # 2. Adição das Coletoras (Manifolds)
     df_temp = pd.DataFrame(nodes_data)
     y_max, y_min = df_temp['y'].max() + 1.0, df_temp['y'].min() - 1.0
-    
+
     all_indices = [e[0] for e in edges_raw] + [e[1] for e in edges_raw]
     counts = pd.Series(all_indices).value_counts()
     leaf_ids = counts[counts == 1].index.tolist()
@@ -283,9 +311,9 @@ def GeraGrafo(levels=3):
         node_id += 1
 
     # 3. Processamento Geométrico de Interseções
-    lines = [LineString([(nodes_data[e[0]]['x'], nodes_data[e[0]]['y']), 
+    lines = [LineString([(nodes_data[e[0]]['x'], nodes_data[e[0]]['y']),
                          (nodes_data[e[1]]['x'], nodes_data[e[1]]['y'])]) for e in edges_raw]
-    
+
     # Adicionar linhas das coletoras para o merge
     df_nodes_final = pd.DataFrame(nodes_data)
     for y_lim in [y_max, y_min]:
@@ -300,7 +328,7 @@ def GeraGrafo(levels=3):
     final_nodes_map = {}
     final_nodes_list = []
     final_edges_list = []
-    
+
     def get_node_id(pt):
         # Arredondamento para evitar erros de precisão de ponto flutuante
         coords = (round(pt[0], 6), round(pt[1], 6))
@@ -316,5 +344,11 @@ def GeraGrafo(levels=3):
         id_end = get_node_id(seg.coords[-1])
         final_edges_list.append([id_start, id_end])
 
-    return np.array(final_nodes_list), np.array(final_edges_list)
+    nodes_np = np.array(final_nodes_list)
+    edges_np = np.array(final_edges_list)
+    mask = edges_np[:, 0] != edges_np[:, 1]
+    edges_np = edges_np[mask]
+
+    return nodes_np, edges_np
+
 
