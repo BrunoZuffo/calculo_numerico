@@ -4,7 +4,7 @@ import scipy.sparse.linalg as splinalg
 from scipy.sparse.linalg import eigsh
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
-from functions import GeraGrafo, AssemblyVectorC, Assembly
+from RedeHidraulica.functions import GeraGrafo, AssemblyVectorC, Assembly
 from functionsM import BuildMatrizes_Eigen_Circular
 
 def Monta_Matriz_Global_Acoplada(K_mem, M_mem, A_net, N1, N2, Lx_ad, Ly_ad, R_ad, h_ad, dt, beta, sigma, rho, e_esp, R_fisico, n_inlet, n_outlet):

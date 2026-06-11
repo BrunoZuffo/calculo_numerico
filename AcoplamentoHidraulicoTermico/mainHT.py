@@ -14,7 +14,7 @@ from functionsHT import (ObterCondutividadeFaces_ViaNos, CriarSistemaSolidoCondu
                          calcular_viscosidade, carregar_rede_hidraulica, calc_campo_fonte ,SolveSystem_FonteEspacial,
                          obter_limites_e_niveis_individuais, plotar_rede_sobre_ax)
 
-from functions import SolveNetwork, calc_vazao, calc_potencia, GeraGrafo, Assembly as AssemblyHidraulico
+from RedeHidraulica.functions import SolveNetwork, calc_vazao, calc_potencia, GeraGrafo, Assembly as AssemblyHidraulico
 
 # -----------------------------------------------------------------------------
 # CÓDIGO BASE - define os parâmetros da placa e executa as funções base
@@ -304,7 +304,7 @@ import pandas as pd
 from scipy.interpolate import RegularGridInterpolator
 from matplotlib.collections import LineCollection
 from functionsHT import CriarSistemaSolidoCondutividadeVariavel, atualiza_condutancias
-from functions import SolveNetwork, calc_potencia, GeraGrafo
+from RedeHidraulica.functions import SolveNetwork, calc_potencia, GeraGrafo
 # Parâmetros Geométricos e Físicos Locais do Exercício 4
 Lx_ex4, Ly_ex4 = 0.03, 0.015
 k_0_ex4 = 0.25

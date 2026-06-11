@@ -1,4 +1,4 @@
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, CalculoCondutancia  
+from RedeHidraulica.functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, CalculoCondutancia  
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 import time
 
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia, AssemblyVectorC
+from RedeHidraulica.functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia, AssemblyVectorC
 import numpy as np
 import matplotlib.pyplot as plt
 
