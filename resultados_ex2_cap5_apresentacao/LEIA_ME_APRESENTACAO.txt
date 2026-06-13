@@ -8,7 +8,7 @@ Tabela única com todos os casos simulados.
 2) 01_evolucao_temporal_comparacao_malhas.png
 Mostra a evolução temporal das grandezas pedidas no enunciado:
 deflexão máxima, pressão no outlet, vazão no outlet, deslocamento central,
-volume acumulado e potência consumida.
+volume acumulado e potência hidráulica assinada.
 
 3) 02_convergencia_dt_malha.png
 Mostra a influência do passo de tempo e da malha.
@@ -18,15 +18,12 @@ Compara diretamente as malhas 51x51 e 101x101 usando o menor dt.
 
 5) 04_sensibilidade_pressao.png
 Mostra o efeito da pressão de entrada.
+A potência mostrada nesse gráfico é a potência máxima absoluta.
 
 6) 05_sensibilidade_largura.png
 Mostra o efeito da largura dos canais.
+A potência mostrada nesse gráfico é a potência máxima absoluta.
 
 7) 06_perfil_transiente_deflexao_membrana.png
-Mostra o perfil espacial da deflexão da membrana no caso nominal.
+Mostra o perfil espacial da deflexão da membrana no caso nominal, em ordem temporal.
 
-Como apresentar:
-- Explique que no Capítulo 5 há acoplamento forte: a pressão no outlet força a membrana,
-  e a velocidade da membrana define a vazão de enchimento do reservatório.
-- Use a tabela final como evidência de que todos os casos foram rodados.
-- Use os gráficos para apresentar apenas os resultados relevantes, sem jogar todos os históricos no relatório.

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 # Lê resultados_ex2_cap5_raw e gera arquivos finais em resultados_ex2_cap5_apresentacao
 # ==============================================================================
 
-RAW_DIR = Path("resultados_ex2_cap5_raw")
+RAW_DIR = Path("resultados_ex2_cap5_pre_processado")
 OUT_DIR = Path("resultados_ex2_cap5_apresentacao")
 LIMPAR_SAIDA_ANTIGA = True
 
@@ -21,12 +21,28 @@ if LIMPAR_SAIDA_ANTIGA and OUT_DIR.exists():
 
 OUT_DIR.mkdir(exist_ok=True)
 
-TABELA_RAW = RAW_DIR / "tabela_raw_ex2_cap5.csv"
+# Aceita nomes diferentes para a tabela bruta, caso você tenha gerado com outro nome.
+possiveis_tabelas = [
+    RAW_DIR / "tabela_raw_ex2_cap5.csv",
+    RAW_DIR / "tabela_completa_ex2_cap5.csv",
+    RAW_DIR / "tabela_final_ex2_cap5.csv",
+]
 
-if not TABELA_RAW.exists():
+TABELA_RAW = None
+
+for arq in possiveis_tabelas:
+    if arq.exists():
+        TABELA_RAW = arq
+        break
+
+if TABELA_RAW is None:
     raise FileNotFoundError(
-        f"Não encontrei {TABELA_RAW}. Rode primeiro: python ex2_cap5_rodar_tudo.py"
+        f"Não encontrei nenhuma tabela válida em {RAW_DIR}. "
+        "Procure se existe algum arquivo .csv de tabela nessa pasta."
     )
+
+print("Usando tabela bruta:")
+print(TABELA_RAW)
 
 
 # ==============================================================================
@@ -106,7 +122,7 @@ variaveis = [
     ("q_outlet_m3s", "Vazão no outlet [m³/s]"),
     ("w_centro_m", "Deslocamento central [m]"),
     ("volume_acumulado_m3", "Volume acumulado [m³]"),
-    ("potencia_W", "Potência consumida [W]"),
+    ("potencia_W", "Potência hidráulica assinada [W]"),
 ]
 
 fig, axs = plt.subplots(3, 2, figsize=(13, 12))
@@ -225,7 +241,7 @@ metricas_pressao = [
     ("w_centro_max_m", "Deslocamento central máximo [m]"),
     ("p_outlet_max_Pa", "Pressão máxima no outlet [Pa]"),
     ("q_outlet_max_abs_m3s", "Vazão máxima no outlet [m³/s]"),
-    ("potencia_max_abs_W", "Potência máxima [W]"),
+    ("potencia_max_abs_W", "Potência máxima absoluta [W]"),
 ]
 
 fig, axs = plt.subplots(2, 2, figsize=(12, 9))
@@ -267,7 +283,7 @@ metricas_largura = [
     ("w_centro_max_m", "Deslocamento central máximo [m]"),
     ("p_outlet_max_Pa", "Pressão máxima no outlet [Pa]"),
     ("q_outlet_max_abs_m3s", "Vazão máxima no outlet [m³/s]"),
-    ("potencia_max_abs_W", "Potência máxima [W]"),
+    ("potencia_max_abs_W", "Potência máxima absoluta [W]"),
 ]
 
 fig, axs = plt.subplots(2, 2, figsize=(12, 9))
@@ -297,15 +313,26 @@ salvar_fig("05_sensibilidade_largura.png")
 # ==============================================================================
 
 SNAP_DIR = RAW_DIR / "snapshots_nominal"
-snapshots = sorted(SNAP_DIR.glob("w_t*.csv"))
+
+
+def extrai_tempo_snapshot(arq):
+    # Exemplo: w_t3.00.csv -> 3.00
+    return float(arq.stem.replace("w_t", ""))
+
+
+snapshots = sorted(
+    SNAP_DIR.glob("w_t*.csv"),
+    key=extrai_tempo_snapshot
+)
 
 if snapshots:
     campos = []
     nomes = []
 
     for arq in snapshots:
+        tempo = extrai_tempo_snapshot(arq)
         campos.append(np.loadtxt(arq, delimiter=","))
-        nomes.append(arq.stem.replace("w_t", "t="))
+        nomes.append(f"t={tempo:.2f}")
 
     n = len(campos)
 
@@ -351,7 +378,7 @@ Tabela única com todos os casos simulados.
 2) 01_evolucao_temporal_comparacao_malhas.png
 Mostra a evolução temporal das grandezas pedidas no enunciado:
 deflexão máxima, pressão no outlet, vazão no outlet, deslocamento central,
-volume acumulado e potência consumida.
+volume acumulado e potência hidráulica assinada.
 
 3) 02_convergencia_dt_malha.png
 Mostra a influência do passo de tempo e da malha.
@@ -361,18 +388,15 @@ Compara diretamente as malhas 51x51 e 101x101 usando o menor dt.
 
 5) 04_sensibilidade_pressao.png
 Mostra o efeito da pressão de entrada.
+A potência mostrada nesse gráfico é a potência máxima absoluta.
 
 6) 05_sensibilidade_largura.png
 Mostra o efeito da largura dos canais.
+A potência mostrada nesse gráfico é a potência máxima absoluta.
 
 7) 06_perfil_transiente_deflexao_membrana.png
-Mostra o perfil espacial da deflexão da membrana no caso nominal.
+Mostra o perfil espacial da deflexão da membrana no caso nominal, em ordem temporal.
 
-Como apresentar:
-- Explique que no Capítulo 5 há acoplamento forte: a pressão no outlet força a membrana,
-  e a velocidade da membrana define a vazão de enchimento do reservatório.
-- Use a tabela final como evidência de que todos os casos foram rodados.
-- Use os gráficos para apresentar apenas os resultados relevantes, sem jogar todos os históricos no relatório.
 """
 
 with open(OUT_DIR / "LEIA_ME_APRESENTACAO.txt", "w", encoding="utf-8") as f:
