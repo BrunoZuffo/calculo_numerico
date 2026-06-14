@@ -225,17 +225,8 @@ salvar_fig("03_comparacao_direta_malhas.png")
 
 
 # ==============================================================================
-# 6. GRÁFICO 04 - SENSIBILIDADE À PRESSÃO DE ENTRADA
+# 6. GRÁFICO 04 - SENSIBILIDADE À PRESSÃO DE ENTRADA COMPARANDO MALHAS
 # ==============================================================================
-
-df_pressao = df_final[
-    (df_final["H_um"] == H_NOM) &
-    (df_final["Nx"] == 51) &
-    (df_final["Ny"] == 51) &
-    (np.isclose(df_final["dt"], DT_NOM))
-].copy()
-
-df_pressao = df_pressao.sort_values("p_inlet_Pa")
 
 metricas_pressao = [
     ("w_centro_max_m", "Deslocamento central máximo [m]"),
@@ -248,18 +239,32 @@ fig, axs = plt.subplots(2, 2, figsize=(12, 9))
 axs = axs.ravel()
 
 for ax, (col, ylabel) in zip(axs, metricas_pressao):
-    ax.plot(
-        df_pressao["p_inlet_Pa"],
-        df_pressao[col],
-        marker="o"
-    )
+
+    for Nx, Ny in MALHAS:
+        df_pressao = df_final[
+            (df_final["H_um"] == H_NOM) &
+            (df_final["Nx"] == Nx) &
+            (df_final["Ny"] == Ny) &
+            (np.isclose(df_final["dt"], DT_NOM))
+        ].copy()
+
+        df_pressao = df_pressao.sort_values("p_inlet_Pa")
+
+        ax.plot(
+            df_pressao["p_inlet_Pa"],
+            df_pressao[col],
+            marker="o",
+            label=f"{Nx}x{Ny}"
+        )
 
     ax.set_xlabel("Pressão de entrada [Pa]")
     ax.set_ylabel(ylabel)
     ax.grid(True)
 
+axs[0].legend(title="Malha")
+
 fig.suptitle(
-    f"Sensibilidade à pressão de entrada | H={H_NOM} µm, malha 51x51, dt={DT_NOM}",
+    f"Sensibilidade à pressão de entrada | H={H_NOM} µm, dt={DT_NOM}",
     fontsize=14
 )
 
@@ -267,17 +272,8 @@ salvar_fig("04_sensibilidade_pressao.png")
 
 
 # ==============================================================================
-# 7. GRÁFICO 05 - SENSIBILIDADE À LARGURA DO CANAL
+# 7. GRÁFICO 05 - SENSIBILIDADE À LARGURA DO CANAL COMPARANDO MALHAS
 # ==============================================================================
-
-df_largura = df_final[
-    (df_final["p_inlet_Pa"] == P_NOM) &
-    (df_final["Nx"] == 51) &
-    (df_final["Ny"] == 51) &
-    (np.isclose(df_final["dt"], DT_NOM))
-].copy()
-
-df_largura = df_largura.sort_values("H_um")
 
 metricas_largura = [
     ("w_centro_max_m", "Deslocamento central máximo [m]"),
@@ -290,18 +286,32 @@ fig, axs = plt.subplots(2, 2, figsize=(12, 9))
 axs = axs.ravel()
 
 for ax, (col, ylabel) in zip(axs, metricas_largura):
-    ax.plot(
-        df_largura["H_um"],
-        df_largura[col],
-        marker="o"
-    )
+
+    for Nx, Ny in MALHAS:
+        df_largura = df_final[
+            (df_final["p_inlet_Pa"] == P_NOM) &
+            (df_final["Nx"] == Nx) &
+            (df_final["Ny"] == Ny) &
+            (np.isclose(df_final["dt"], DT_NOM))
+        ].copy()
+
+        df_largura = df_largura.sort_values("H_um")
+
+        ax.plot(
+            df_largura["H_um"],
+            df_largura[col],
+            marker="o",
+            label=f"{Nx}x{Ny}"
+        )
 
     ax.set_xlabel("Largura do canal [µm]")
     ax.set_ylabel(ylabel)
     ax.grid(True)
 
+axs[0].legend(title="Malha")
+
 fig.suptitle(
-    f"Sensibilidade à largura do canal | p_inlet={P_NOM} Pa, malha 51x51, dt={DT_NOM}",
+    f"Sensibilidade à largura do canal | p_inlet={P_NOM} Pa, dt={DT_NOM}",
     fontsize=14
 )
 
