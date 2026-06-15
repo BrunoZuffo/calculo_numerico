@@ -81,10 +81,10 @@ print(OUT_DIR / "tabela_final_ex2_cap5.csv")
 
 H_NOM = 1000
 P_NOM = 10000
-DT_NOM = 0.025
 
 DTS = sorted(df_final["dt"].unique())
 DT_REF = min(DTS)
+DT_NOM = min(DTS)
 
 MALHAS = sorted(
     df_final[["Nx", "Ny"]].drop_duplicates().itertuples(index=False, name=None)
