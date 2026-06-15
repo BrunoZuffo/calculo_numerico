@@ -11,7 +11,7 @@ if diretorio_pai not in sys.path:
 
 from RedeHidraulica.functions import GeraGrafo, AssemblyVectorC, Assembly
 from MembranaElastica.functionsM import BuildMatrizes_Eigen_Circular
-from AcoplamentoHidraulicoMecanico.functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, Calcula_Matriz_R
+from AcoplamentoHidraulicoMecanico.functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, Calcula_Matriz_R, roda_exercicio_3, roda_exercicio_4, roda_exercicio_5
 
 # ==============================================================================
 # 1. PARÂMETROS FÍSICOS E ADIMENSIONAIS (Dados da Seção 5.2.5 do PDF)
@@ -159,6 +159,18 @@ plt.show()
 # EXERCÍCIO 4
 # ==============================================================================
 
+roda_exercicio_4(
+    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
+    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
+)
+
 # ==============================================================================
 # EXERCÍCIO 5 
 # ==============================================================================
+
+roda_exercicio_5(
+    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
+    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
+)
+    
+
