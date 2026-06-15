@@ -1,10 +1,19 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy import sparse
+import os
+import sys
+
+diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+diretorio_pai = os.path.dirname(diretorio_atual)
+if diretorio_pai not in sys.path:
+    sys.path.insert(0, diretorio_pai)
 
 # Importações dos seus arquivos base (CORRIGIDO: adicionado roda_exercicio_4)
-from functions import GeraGrafo, AssemblyVectorC, Assembly
-from functionsM import BuildMatrizes_Eigen_Circular
-from functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, roda_exercicio_3, roda_exercicio_4, roda_exercicio_5
+from RedeHidraulica.functions import GeraGrafo, AssemblyVectorC, Assembly
+from MembranaElastica.functionsM import BuildMatrizes_Eigen_Circular
+from AcoplamentoHidraulicoMecanico.functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, Calcula_Matriz_R
+
 
 # ==============================================================================
 # 1. PARÂMETROS FÍSICOS E ADIMENSIONAIS (Dados da Seção 5.2.5 do PDF)
@@ -108,28 +117,38 @@ for t in tempos:
     hist_w_centro.append(w_centro_fisico)
     hist_q_out.append(q_out_adim)
 
-
-
-# ==============================================================================
-# EXERCÍCIO 3
-# ==============================================================================
-
-roda_exercicio_3()
+print("Simulação concluída com sucesso! (Código Base Pronto para Exercícios)")
 
 # ==============================================================================
-# EXERCÍCIO 4
+# EXERCÍCIO 1 
 # ==============================================================================
 
-roda_exercicio_4(
-    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
-    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
+print("\n" + "="*65)
+print(f"{'EXERCÍCIO 1 – Esparsidade de R   (malha 26×26)':^65}")
+print("="*65)
+
+# Malha reduzida de 26×26 conforme enunciado
+N1_ex1, N2_ex1 = 26, 26
+h_ad_ex1 = Lx_ad / (N1_ex1 - 1)
+
+R_mat = Calcula_Matriz_R(
+    A_net_sparse,
+    N1_ex1, N2_ex1, Lx_ad, Ly_ad, R_ad, h_ad_ex1,
+    sigma, rho, e_esp, R_fisico,
+    n_inlet, n_outlet
 )
 
-# ==============================================================================
-# EXERCÍCIO 5
-# ==============================================================================
+n_nao_nulos = np.count_nonzero(R_mat)
+print(f"Dimensão de R  : {R_mat.shape}")
+print(f"Não nulos      : {n_nao_nulos}")
+print(f"Densidade      : {n_nao_nulos / R_mat.size * 100:.1f} %")
 
-roda_exercicio_5(
-    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
-    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
+plt.figure(figsize=(6, 6))
+plt.spy(R_mat, marker=',', markersize=1)
+plt.title(
+    f"Esparsidade de R   (malha {N1_ex1}×{N2_ex1})\n"
+    r"$\mathbf{R} = \hat{h}^2\,\mathbf{U}^\top\hat{\mathbf{A}}^{-1}\mathbf{U}$"
 )
+plt.tight_layout()
+plt.savefig("ex1_esparsidade_R.png", dpi=150)
+plt.show()
