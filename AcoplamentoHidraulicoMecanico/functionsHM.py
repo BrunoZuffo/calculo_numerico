@@ -4,7 +4,7 @@ import scipy.sparse.linalg as splinalg
 from scipy.sparse.linalg import eigsh
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
-from RedeHidraulica.functions import GeraGrafo, AssemblyVectorC, Assembly
+from functions import GeraGrafo, AssemblyVectorC, Assembly
 from functionsM import BuildMatrizes_Eigen_Circular
 
 def Monta_Matriz_Global_Acoplada(K_mem, M_mem, A_net, N1, N2, Lx_ad, Ly_ad, R_ad, h_ad, dt, beta, sigma, rho, e_esp, R_fisico, n_inlet, n_outlet):
@@ -93,6 +93,178 @@ def Resolve_Passo_Tempo(Aglob, M_mem, w_n, v_n, p_inlet_adim, dt, nm, np_net, n_
     p_next = sol[2*nm:]
     
     return w_next, v_next, p_next
+
+def calcula_condutancias_quadradas(conec, Xno, H_k, mu):
+    conec = np.asarray(conec, dtype=int)
+    nc = conec.shape[0]
+    C = np.zeros(nc)
+    area = H_k ** 2
+    D_h = np.sqrt(4.0 * area / np.pi)
+    kappa = np.pi * D_h**4 / (128.0 * mu)
+    for k in range(nc):
+        n1, n2 = conec[k, 0], conec[k, 1]
+        x1, y1 = Xno[n1]
+        x2, y2 = Xno[n2]
+        L_k = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        C[k] = kappa / L_k
+    return C
+
+def roda_exercicio_3():
+    print("--- Iniciando Exercício 3: Relaxamento Transiente (Corte de Pressão) ---")
+
+    # Parâmetros Fixos do Enunciado
+    Nx, Ny = 51, 51
+    dt = 0.025
+    H_k = 1000e-6          # Canal de 1000 um
+    p_inlet_dim = 10000.0  # Pressão inicial de 10 kPa
+    
+    t_carga = 12.0         # Fase 1: Tempo inflando a membrana
+    t_descarga = 18.0      # Fase 2: Tempo após fechar a pressão (relaxamento)
+    t_total = t_carga + t_descarga
+    
+    # Propriedades Físicas
+    mu = 5e-4
+    mm_to_m = 0.001
+    R_fisico = 0.25e-2
+    e_esp = 0.1e-3
+    sigma = 200.0
+    rho = 900.0
+    
+    # Parâmetros Adimensionais de Referência
+    Lx_ad, Ly_ad, R_ad = 2.0, 2.0, 1.0
+    sigma_ad, rho_ad, e_ad, beta_ad = 1.0, 1.0, 1.0, 0.1
+    h_ad = Lx_ad / (Nx - 1)
+    nm = Nx * Ny
+    no_centro = (Ny // 2) * Nx + (Nx // 2)
+
+    # Construindo a infraestrutura física (Rede e Membrana)
+    Xno, conec = GeraGrafo(levels=3)
+    Xno = Xno * mm_to_m
+    n_inlet, n_outlet = 0, 5
+    
+    C = calcula_condutancias_quadradas(conec, Xno, H_k, mu)
+    A_net_sparse = sparse.csr_matrix(Assembly(conec, C))
+    np_net = A_net_sparse.shape[0]
+
+    K_mem, M_mem = BuildMatrizes_Eigen_Circular(Nx, Ny, sigma_ad, rho_ad, e_ad, h_ad)
+
+    # Montando o acoplamento global
+    Aglob, U_sparse, pref, vref = Monta_Matriz_Global_Acoplada(
+        K_mem, M_mem, A_net_sparse, Nx, Ny, Lx_ad, Ly_ad, R_ad, h_ad, 
+        dt, beta_ad, sigma, rho, e_esp, R_fisico, n_inlet, n_outlet
+    )
+
+    # Definição de Escalas Físicas para conversão
+    wref = 0.01 * R_fisico
+    qref = (R_fisico ** 2) * vref
+
+    # Alocação de variáveis para a simulação
+    w_n = np.zeros(nm)
+    v_n = np.zeros(nm)
+    tempos = np.arange(0.0, t_total + 0.5 * dt, dt)
+    U_out = U_sparse[n_outlet, :].toarray().ravel()
+
+    # Listas para guardar dados dos gráficos
+    hist_t = []
+    hist_p_out = []
+    hist_q_out = []
+    hist_w_centro = []
+    hist_volume = []
+    hist_pot = []
+
+    # LOOP TEMPORAL
+    for t in tempos:
+        # AQUI ESTÁ A LÓGICA DO EXERCÍCIO 3:
+        # Se o tempo passou de 12, a pressão cai para ZERO instantaneamente.
+        if t <= t_carga:
+            p_inlet_atual_dim = p_inlet_dim
+        else:
+            p_inlet_atual_dim = 0.0
+            
+        p_inlet_adim = p_inlet_atual_dim / pref
+
+        # Resolve o sistema linear acoplado para o instante atual
+        w_n, v_n, p_n = Resolve_Passo_Tempo(
+            Aglob, M_mem, w_n, v_n, p_inlet_adim, dt, nm, np_net, n_inlet
+        )
+
+        # Conversão dos resultados adimensionais para unidades físicas reais
+        p_outlet_fisico = p_n[n_outlet] * pref
+        q_out_fisico = (h_ad**2 * np.sum(U_out * v_n)) * qref
+        w_centro_fisico = w_n[no_centro] * wref
+        
+        # Cálculo do volume geométrico do reservatório abaulado (m³)
+        area_elemento_fisico = (h_ad * R_fisico)**2
+        vol_reservatorio = np.sum(w_n * wref) * area_elemento_fisico
+        
+        # Potência Hidráulica fornecida na entrada (W)
+        potencia = p_inlet_atual_dim * q_out_fisico
+
+        # Armazenando nas listas com multiplicadores para melhor escala visual nos eixos
+        hist_t.append(t)
+        hist_p_out.append(p_outlet_fisico)
+        hist_q_out.append(q_out_fisico * 1e9)       # mm³/s
+        hist_w_centro.append(w_centro_fisico * 1e6)  # µm
+        hist_volume.append(vol_reservatorio * 1e9)   # mm³
+        hist_pot.append(potencia * 1e6)              # µW
+
+    # GERANDO OS GRÁFICOS EXIGIDOS
+    print("Simulação concluída. Renderizando gráficos...")
+    fig, axs = plt.subplots(3, 2, figsize=(14, 10))
+    
+    # Título principal detalhado conforme a referência
+    fig.suptitle(r'Exercício 3 - Rede de canais com $H_k = 1000\ \mu m$ e $p_{inlet} = 10000\ Pa$', fontsize=15)
+
+    # Gráfico 1: Pressão de Saída
+    axs[0, 0].plot(hist_t, hist_p_out, 'r-', lw=2)
+    axs[0, 0].axvline(x=t_carga, color='k', linestyle='--', alpha=0.5)
+    axs[0, 0].set_title(r'Pressão no nó de saída ($p_{outlet}$)')
+    axs[0, 0].set_ylabel('Pressão [Pa]')
+    axs[0, 0].grid(True, alpha=0.3)
+
+    # Gráfico 2: Vazão de Saída
+    axs[0, 1].plot(hist_t, hist_q_out, 'b-', lw=2)
+    axs[0, 1].axvline(x=t_carga, color='k', linestyle='--', alpha=0.5)
+    axs[0, 1].set_title(r'Vazão no nó de saída ($q_{outlet}$)')
+    axs[0, 1].set_ylabel('Vazão [mm³/s]') # Mantido em mm³/s para melhor leitura visual
+    axs[0, 1].grid(True, alpha=0.3)
+
+    # Gráfico 3: Deflexão Central
+    axs[1, 0].plot(hist_t, hist_w_centro, 'g-', lw=2)
+    axs[1, 0].axvline(x=t_carga, color='k', linestyle='--', alpha=0.5)
+    axs[1, 0].set_title(r'Deflexão no nó central ($w_0$)')
+    axs[1, 0].set_ylabel(r'Deflexão [$\mu$m]')
+    axs[1, 0].grid(True, alpha=0.3)
+
+    # Gráfico 4: Volume do Reservatório
+    axs[1, 1].plot(hist_t, hist_volume, 'm-', lw=2)
+    axs[1, 1].axvline(x=t_carga, color='k', linestyle='--', alpha=0.5)
+    axs[1, 1].set_title(r'Volume do reservatório ($V$)')
+    axs[1, 1].set_ylabel('Volume [mm³]')
+    axs[1, 1].grid(True, alpha=0.3)
+
+    # Gráfico 5: Potência Consumida
+    axs[2, 0].plot(hist_t, hist_pot, 'c-', lw=2)
+    axs[2, 0].axvline(x=t_carga, color='k', linestyle='--', alpha=0.5)
+    axs[2, 0].set_title(r'Potência consumida ($P$)')
+    axs[2, 0].set_ylabel(r'Potência [$\mu$W]')
+    axs[2, 0].set_xlabel('Tempo adimensional')
+    axs[2, 0].grid(True, alpha=0.3)
+
+    # Oculta o sexto quadrante sobressalente
+    axs[2, 1].axis('off')
+
+    # Aplicando o eixo X padronizado para os gráficos visíveis
+    axs[0, 0].set_xlabel('Tempo adimensional')
+    axs[0, 1].set_xlabel('Tempo adimensional')
+    axs[1, 0].set_xlabel('Tempo adimensional')
+    axs[1, 1].set_xlabel('Tempo adimensional')
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    # Salva uma cópia em alta definição para o seu relatório técnico
+    plt.savefig('graficos_exercicio3_final.png', dpi=300)
+    plt.show()
 
 def roda_exercicio_4(Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad):
     print("\n--- Iniciando Exercício 4 ---")
