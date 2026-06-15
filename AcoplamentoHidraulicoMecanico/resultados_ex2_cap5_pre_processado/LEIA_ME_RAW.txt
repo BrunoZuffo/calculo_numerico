@@ -1,0 +1,9 @@
+Dados brutos da Questão 2 - Capítulo 5
+
+Total de casos: 96
+Tempo total de execução: 2776.01 s
+
+Arquivos:
+- tabela_raw_ex2_cap5.csv: tabela completa com uma linha por caso.
+- historico_*.csv: evolução temporal de cada caso.
+- snapshots_nominal/w_t*.csv: perfis espaciais da membrana para o caso nominal.

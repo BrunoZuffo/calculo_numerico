@@ -1,4 +1,4 @@
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, CalculoCondutancia  
+from RedeHidraulica.functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, CalculoCondutancia  
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -6,7 +6,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 import time
 
-from functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia, AssemblyVectorC
+from RedeHidraulica.functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia, AssemblyVectorC
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -72,73 +72,73 @@ print(f"Vazão necessária para manter 100 Pa no Inlet: {vazao_inlet_real:.4e} m
 
 # C: Itens 4 e 5
 
-t_array = np.linspace(0,10,1000) #discretização do tempo: 1000 passos entre 0 e 10s
-omega_sin = 3.0 #frequência angular
+t_array = np.linspace(0, 10, 1000)
+omega_sin = 3.0
 omega_cos = 4.0
 
 ps_base = {str(n_outlet + 1): 0}
 
-Qs_base_sin = {'1': 1.0e-6} #vazão base do nó de entrada 0 (1 - 1 = 0), 1ml/s
-pressao_base_sin = SolveNetwork(conec, C, ps=ps_base, Qs=Qs_base_sin)
-pressao_maxima_base_sin = np.max(pressao_base_sin)
+# Calcular vetores base unitários (1 m³/s de injeção) para permitir escalonamento
+Qs_unit_sin = {'1': 1.0}
+p_base_vetor_sin = SolveNetwork(conec, C, ps=ps_base, Qs=Qs_unit_sin)
 
-Qs_base_cos = {'176': 1.0e-6} #vazão base do nó 175 (176 - 1 = 175), 1ml/s
-pressao_base_cos = SolveNetwork(conec, C, ps=ps_base, Qs=Qs_base_cos)
-pressao_maxima_base_cos = np.max(pressao_base_cos)
+Qs_unit_cos = {'176': 1.0}
+p_base_vetor_cos = SolveNetwork(conec, C, ps=ps_base, Qs=Qs_unit_cos)
 
-pressao_maxima_tempo_sin = []
-pressao_maxima_tempo_cos = []
+pressao_maxima_tempo = []
 
 for t in t_array:
-    fator_tempo_sin = 1.0 + 0.1 * np.sin(omega_sin * t)
-    fator_tempo_cos = 0.1 + 0.01 * np.cos(omega_cos * t)
+    # Calcular vazões reais no instante t (em m³/s)
+    # 1 mL/s = 1.0e-6 m³/s
+    Q_t_sin = (1.0 + 0.1 * np.sin(omega_sin * t)) * 1.0e-6
+    Q_t_cos = (0.1 + 0.01 * np.cos(omega_cos * t)) * 1.0e-6
     
-    p_max_atual_sin = pressao_maxima_base_sin * fator_tempo_sin
-    p_max_atual_cos = pressao_maxima_base_cos * fator_tempo_cos
-    pressao_maxima_tempo_sin.append(p_max_atual_sin)
-    pressao_maxima_tempo_cos.append(p_max_atual_cos)
+    # Superposição vetorial dos campos de pressão
+    p_t = p_base_vetor_sin * Q_t_sin + p_base_vetor_cos * Q_t_cos
+    
+    # Extração do máximo global no instante t
+    pressao_maxima_tempo.append(np.max(p_t))
 
 plt.figure(figsize=(10, 6))
-plt.plot(t_array, pressao_maxima_tempo_sin, color='blue', linewidth=2, label=f'Injeção com sin({omega_sin}t)')
-plt.plot(t_array, pressao_maxima_tempo_cos, color='orange', linewidth=2, label=f'Injeção com cos({omega_cos}t)')
-
-plt.title("Pressão Máxima com Injeção Dinâmica (Itens 4 e 5)")
+plt.plot(t_array, pressao_maxima_tempo, color='purple', linewidth=2, label='Pressão Máxima Resultante')
+plt.title("Pressão Máxima na Rede (Itens 4 e 5 - Superposição)")
 plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle=':', alpha=0.7)
 plt.legend(loc="upper right")
+#plt.savefig('fig_superposicao.pdf', format='pdf', bbox_inches='tight')
+plt.show()
 
 # D: Item 6
 
-t_array = np.linspace(0,10,100) #discretização do tempo: 100 passos entre 0 e 10s
+t_array = np.linspace(0, 10, 100)
 
-ps_D = {
-    str(n_outlet + 1): 0
-}
-Qs_D = {
-    '1': 1.0e-7 #0.1 mL/s
-}
+ps_D = {str(n_outlet + 1): 0}
+Qs_D = {'1': 1.0e-7}
 
-max_pressure = [] #vetor para guardar os valores máximos de pressão ao longo do tempo
+# Pré-cálculo O(N^3) executado APENAS UMA VEZ com as propriedades base (20°C)
+pressure_base_D = SolveNetwork(conec, C, ps=ps_D, Qs=Qs_D)
+max_pressure_base = np.max(pressure_base_D)
+
+max_pressure = []
+mu_0 = 0.001  # Viscosidade base a 20°C
 
 for t in t_array:
-    T_t = 20 + 0.9*(t**2)
+    T_t = 20 + 0.9 * (t**2)
     mu_t = 0.001791 / (1 + 0.03368 * T_t + 0.000221 * (T_t**2))
 
-    #Calculo da condutância:
-        #a condutância C já calculada depende da geometria do cano e da viscosidade da água a 20 graus celcius (0.001). Para calcular a condutância em função de 
-        #mu_t basta multiplicar C por 0.001 (para eliminar o uso da viscosidade a 20 graus) e dividir por mu_t (para passar a usar a viscosidade em função do tempo)
-    C_t = C * (0.001/mu_t)
-
-    pressure_t = SolveNetwork(conec, C_t, ps=ps_D, Qs=Qs_D)
-    max_pressure.append(np.max(pressure_t))
+    # Atualização O(1) do campo de pressões via relação algébrica
+    p_max_t = max_pressure_base * (mu_t / mu_0)
+    max_pressure.append(p_max_t)
 
 plt.figure(figsize=(10, 5))
 plt.plot(t_array, max_pressure, color='red', linewidth=2)
-plt.title("Efeito do Aquecimento na Pressão Máxima (Item 6)")
+plt.title("Efeito do Aquecimento na Pressão Máxima (Item 6 - Otimizado)")
 plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle='--', alpha=0.7)
+#plt.savefig('fig_aquecimento.pdf', format='pdf', bbox_inches='tight')
+plt.show()
 
 # E: Item 7
 
@@ -193,6 +193,8 @@ for level in [1,2,3,4]:
 # RESULTADOS E PLOTS
 
 #Rede Hidráulica
-fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m)
+
+#CORRIGIR ERRO
+fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m, save_path='fig_rede_hidraulica.png')
 
 plt.show()

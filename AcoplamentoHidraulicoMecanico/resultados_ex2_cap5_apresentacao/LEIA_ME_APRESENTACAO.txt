@@ -1,0 +1,29 @@
+
+Questão 2 - Capítulo 5
+Arquivos finais gerados em resultados_ex2_cap5_apresentacao
+
+1) tabela_final_ex2_cap5.csv
+Tabela única com todos os casos simulados.
+
+2) 01_evolucao_temporal_comparacao_malhas.png
+Mostra a evolução temporal das grandezas pedidas no enunciado:
+deflexão máxima, pressão no outlet, vazão no outlet, deslocamento central,
+volume acumulado e potência hidráulica assinada.
+
+3) 02_convergencia_dt_malha.png
+Mostra a influência do passo de tempo e da malha.
+
+4) 03_comparacao_direta_malhas.png
+Compara diretamente as malhas 51x51 e 101x101 usando o menor dt.
+
+5) 04_sensibilidade_pressao.png
+Mostra o efeito da pressão de entrada.
+A potência mostrada nesse gráfico é a potência máxima absoluta.
+
+6) 05_sensibilidade_largura.png
+Mostra o efeito da largura dos canais.
+A potência mostrada nesse gráfico é a potência máxima absoluta.
+
+7) 06_perfil_transiente_deflexao_membrana.png
+Mostra o perfil espacial da deflexão da membrana no caso nominal, em ordem temporal.
+
