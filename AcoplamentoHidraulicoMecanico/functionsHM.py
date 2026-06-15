@@ -429,3 +429,41 @@ def roda_exercicio_5(Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, Lx_ad, L
     plt.title(f"Exercício 5: Análise de Forçamento na Freq. do 3º Modo ($\omega_3={omega_3_ad:.2f}$ rad/s)")
     fig.tight_layout()
     plt.show()
+
+#Exercício 1 =================================================
+def Calcula_Matriz_R(A_net, N1, N2, Lx_ad, Ly_ad, R_ad, h_ad, sigma, rho, e_esp, R_fisico, n_inlet, n_outlet):
+#calcula matriz de amortecimento hidraulico
+    nm = N1 * N2
+    np_net = A_net.shape[0]
+
+    # Adimensionaliza e aplica BC (mesmo procedimento de Monta_Matriz_Global_Acoplada)
+    w0   = 0.01 * R_fisico
+    pref = sigma * w0 / R_fisico**2
+    vref = (w0 / R_fisico) * np.sqrt(sigma / (rho * e_esp))
+
+    A_scaled_lil = (A_net.copy() * (pref / (vref * R_fisico**2))).tolil()
+    A_scaled_lil[n_inlet, :] = 0.0
+    A_scaled_lil[n_inlet, n_inlet] = 1.0
+    A_hat = A_scaled_lil.toarray()   # denso para inversão direta
+
+    # Monta vetores
+    xc, yc = Lx_ad / 2.0, Ly_ad / 2.0
+    x = np.linspace(0, Lx_ad, N1)
+    y = np.linspace(0, Ly_ad, N2)
+
+    uns = np.ones(nm)
+    for j in range(N2):
+        for i in range(N1):
+            dist2 = (x[i] - xc)**2 + (y[j] - yc)**2
+            if dist2 >= R_ad**2:
+                uns[i + j * N1] = 0.0
+
+    U = np.zeros((np_net, nm))
+    U[n_outlet, :] = uns
+
+    # formula R = ĥ² · U^T · A_hat^{-1} · U
+    h2  = h_ad**2
+    A_inv = np.linalg.inv(A_hat)
+    R_mat = h2 * U.T @ A_inv @ U
+
+    return R_mat
