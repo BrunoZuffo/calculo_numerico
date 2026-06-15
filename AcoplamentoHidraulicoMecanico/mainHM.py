@@ -9,11 +9,9 @@ diretorio_pai = os.path.dirname(diretorio_atual)
 if diretorio_pai not in sys.path:
     sys.path.insert(0, diretorio_pai)
 
-# Importações dos seus arquivos base (CORRIGIDO: adicionado roda_exercicio_4)
 from RedeHidraulica.functions import GeraGrafo, AssemblyVectorC, Assembly
 from MembranaElastica.functionsM import BuildMatrizes_Eigen_Circular
 from AcoplamentoHidraulicoMecanico.functionsHM import Monta_Matriz_Global_Acoplada, Resolve_Passo_Tempo, Calcula_Matriz_R
-
 
 # ==============================================================================
 # 1. PARÂMETROS FÍSICOS E ADIMENSIONAIS (Dados da Seção 5.2.5 do PDF)
@@ -152,3 +150,15 @@ plt.title(
 plt.tight_layout()
 plt.savefig("ex1_esparsidade_R.png", dpi=150)
 plt.show()
+
+# ==============================================================================
+# EXERCÍCIO 3
+# ==============================================================================
+
+# ==============================================================================
+# EXERCÍCIO 4
+# ==============================================================================
+
+# ==============================================================================
+# EXERCÍCIO 5 
+# ==============================================================================
