@@ -188,6 +188,8 @@ for ax, (col, ylabel) in zip(axs, metricas_dt):
 
     ax.set_xlabel("Passo de tempo adimensional dt")
     ax.set_ylabel(ylabel)
+    ax.set_xticks(DTS)
+    ax.set_xticklabels([str(dt) for dt in DTS])
     ax.grid(True)
 
 axs[0].legend(title="Malha")
