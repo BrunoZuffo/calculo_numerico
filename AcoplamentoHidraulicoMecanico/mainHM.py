@@ -118,10 +118,14 @@ roda_exercicio_3()
 # 5. DISPARO DO EXERCÍCIO 4
 # ==============================================================================
 
-#roda_exercicio_4(
-#    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
-#    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
-#)
+roda_exercicio_4(
+    Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
+    Lx_ad, Ly_ad, R_ad, sigma_ad, rho_ad, e_ad
+)
+
+# ==============================================================================
+# 6. DISPARO DO EXERCÍCIO 5
+# ==============================================================================
 
 roda_exercicio_5(
     Nx, Ny, h_ad, dt, mu, R_fisico, e_esp, sigma, rho, 
