@@ -1,53 +1,10 @@
-"""
-functionsGD.py
-----------------------------------------------------------------------
-Funcoes de montagem da BASE FISICA do GEMEO DIGITAL (Capitulo 6).
-
-Este modulo NAO resolve os exercicios das Secoes 6.3 (Predicoes sob
-Incerteza - Amostragem Monte Carlo) e 6.4 (Aprendizado de Modelos -
-Interpolacao, Minimos Quadrados, Zeros de Funcao e Diferenciacao
-Numerica). Ele concentra apenas as rotinas necessarias para montar, de
-ponta a ponta, o modelo acoplado completo (Placa Termica -> Rede
-Hidraulica -> Membrana Elastica), nas condicoes nominais especificadas
-na Secao 6.2 do PDF da disciplina.
-
-Pipeline fisico (conforme Secao 6.1 do PDF):
-
-    1) Resolve-se o balanco termico da placa solida, considerando que a
-       proximidade dos microcanais modifica localmente a condutividade
-       termica efetiva do material (Equacao 4.3, ja implementada em
-       ObterCondutividadeFaces_ViaNos no Capitulo 4);
-
-    2) Estima-se a temperatura media de cada canal (integral de linha
-       do campo de temperatura ao longo de cada aresta da rede) e, a
-       partir dela, a viscosidade local do fluido e a condutancia
-       hidraulica atualizada de cada canal;
-
-    3) Monta-se a matriz de rigidez hidraulica da rede com as
-       condutancias termicamente atualizadas e acopla-se, de forma
-       monolitica (conforme estruturado no Capitulo 5), a membrana
-       elastica, resultando na matriz global do Gemeo Digital.
-
-NOTA SOBRE OS IMPORTS: seguindo o mesmo padrao ja usado em
-functionsHM.py (imports "achatados", sem prefixo de pacote), este
-arquivo importa diretamente "functions", "functionsM", "functionsHT" e
-"functionsHM". Para isso funcionar, o script que importar functionsGD
-(o mainGD.py) precisa ter adicionado as pastas RedeHidraulica,
-MembranaElastica, AcoplamentoHidraulicoTermico e
-AcoplamentoHidraulicoMecanico diretamente ao sys.path antes do import
-- o que ja e feito em mainGD.py.
-"""
-
+import time
 import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
-# ----------------------------------------------------------------------
-# Imports cruzados entre os modulos dos capitulos anteriores (imports
-# "achatados", no mesmo padrao usado internamente por functionsHM.py)
-# ----------------------------------------------------------------------
 from functions import GeraGrafo, Assembly, calc_vazao, calc_potencia
 from functionsM import BuildMatrizes_Eigen_Circular
 from functionsHT import (
@@ -62,6 +19,12 @@ from functionsHM import (
     Resolve_Passo_Tempo,
 )
 
+_integral_trapezoidal = getattr(np, "trapezoid", None) or np.trapz
+
+
+# =======================================================================================
+# CÓDIGO BASE - GÊMEO DIGITAL
+# =======================================================================================
 
 # ========================================================================
 # 1. SUBSISTEMA 1 - PLACA TERMICA
@@ -146,16 +109,10 @@ def ConstroiMembrana(Nx_m, Ny_m, Lx_ad, sigma_ad, rho_ad, e_ad):
     return K_mem, M_mem, h_ad
 
 
-# ==============================================================================
-# SEÇÃO 6.3.2 (EXERCÍCIO 2)
-# ==============================================================================
-
-
-
-
 # ========================================================================
 # 4. MONTAGEM COMPLETA DO GEMEO DIGITAL
 # ========================================================================
+
 def MontaGemeoDigital(params):
     """
     Executa o pipeline completo de montagem do Gemeo Digital (GD),
@@ -231,6 +188,7 @@ def MontaGemeoDigital(params):
 # ========================================================================
 # 5. SIMULACAO TRANSIENTE DE VERIFICACAO DA BASE
 # ========================================================================
+
 def RodaSimulacaoBase(GD, t_max, p_inlet_dim):
     """
     Executa um laco temporal (Euler implicito) usando a matriz global
@@ -287,6 +245,7 @@ def RodaSimulacaoBase(GD, t_max, p_inlet_dim):
 # ========================================================================
 # 6. VISUALIZACAO DE DIAGNOSTICO DA BASE MONTADA
 # ========================================================================
+
 def PlotaEstadoBaseGD(GD, historico, save_path=None):
     """
     Gera um painel de diagnostico com tres paineis:
@@ -352,23 +311,19 @@ def PlotaEstadoBaseGD(GD, historico, save_path=None):
     plt.show()
     return fig
 
+# =======================================================================================
+# EXERCÍCIOS - CAPÍTULO 6
+# =======================================================================================
+
+# ==============================================================================
+# SECAO 6.3.2 -  Investigando o comportamento do sistema via Monte Carlo
+# ==============================================================================
 
 # ========================================================================
-# 7. SECAO 6.3.2 - EXERCICIO 1
-#    Analise Estacionaria de Falhas Hidraulicas (Amostragem Monte Carlo)
+# SECAO 6.3.2 - EXERCICIO 1
+# Análise Estacionária de Falhas Hidráulicas
 # ========================================================================
-#
-# Cenario fisico (Secao 6.3 / 6.3.2 do PDF):
-#   - Subsistema ISOLADO composto apenas pela Rede Hidraulica e pela
-#     Placa Termica, em regime permanente (sem a membrana elastica).
-#   - Cada canal possui probabilidade independente p_O de obstrucao;
-#     quando obstruido, sua condutancia C_k e reduzida por um fator de
-#     severidade f_obs:  C_k <- C_k / f_obs.
-#   - Pressao de descarga nula no reservatorio: p_outlet = 0.
-#   - Pergunta de projeto: Prob(q_inlet < q_critico),
-#     com q_critico = 1.25e-5 (vazao volumetrica no no 0).
-#
-# ------------------------------------------------------------------------
+
 def RandomFail(C_original, pO, fObs, rng):
     """
     Gera, de forma estocastica, uma instancia da rede com microcanais
@@ -755,16 +710,261 @@ def PlotaExercicio1_FalhasHidraulicas(resultados,
 
     return fig1, fig2
 
+# ==============================================================================
+# SEÇÃO 6.3.2 - EXERCÍCIO 2
+# Análise Dinâmica do Gêmeo Digital Completo
+# ==============================================================================
+
+def MontaSistemaFalho(GD, C_real, dt):
+    """
+    Reconstroi, para uma instancia de rede COM FALHAS (vetor de
+    condutancias `C_real`, ja gerado por RandomFail) e um passo de
+    tempo `dt`, a matriz global acoplada Aglob (necessaria para marchar
+    no tempo via Resolve_Passo_Tempo) E a matriz de condutancia
+    hidraulica "fisica" 𝔸 = D^T K D, adimensionalizada e SEM a
+    substituicao da linha do Inlet, usada na forma quadratica da
+    potencia instantanea P(t) = p(t)^T 𝔸 p(t).
+
+    Nota: como o vetor de condutancias muda a cada realizacao
+    estocastica (e o passo de tempo pode mudar entre cenarios, ja que o
+    Exercicio 2 pede dt=0.05 e dt=0.1), tanto a rede (A_net) quanto
+    Aglob (que depende de dt) precisam ser remontados aqui -- somente
+    as matrizes da membrana (K_mem, M_mem) sao reaproveitadas de GD,
+    pois nao dependem da falha hidraulica.
+
+    Retorna (Aglob_falha, A_potencia, pref).
+    """
+    params = GD['params']
+    conec = GD['conec']
+
+    # ---- Rede hidraulica com falhas, para esta realizacao --------------
+    A_net_falha = Assembly(conec, C_real)
+    A_net_falha_sparse = sparse.csr_matrix(A_net_falha)
+
+    # ---- Matriz global acoplada (membrana + rede), para este dt -------
+    Aglob_falha, _U_sparse, pref, vref = Monta_Matriz_Global_Acoplada(
+        GD['K_mem'], GD['M_mem'], A_net_falha_sparse,
+        params['Nx_m'], params['Ny_m'], params['Lx_ad'], params['Ly_ad'],
+        params['R_ad'], GD['h_ad'], dt, params['beta_ad'],
+        params['sigma'], params['rho'], params['e_esp'], params['R_fisico'],
+        GD['n_inlet'], GD['n_outlet']
+    )
+
+    # ---- Matriz "fisica" D^T K D, adimensionalizada, SEM a -------------
+    # substituicao da linha do Inlet (usada apenas para o calculo de
+    # P(t), e nao para a resolucao do sistema). O fator de escala e o
+    # mesmo aplicado internamente na montagem de Aglob (Secao 5.2.4 do
+    # PDF: A_adim = A_dimensional * pref / (vref * R_fisico**2)).
+    fator_escala = pref / (vref * params['R_fisico'] ** 2)
+    A_potencia = A_net_falha_sparse * fator_escala
+
+    return Aglob_falha, A_potencia, pref
 
 
+def SimulaEnergiaDissipada(GD, C_real, dt, t_max, p_inlet_dim, t_i=0.0):
+    """
+    Executa UMA realizacao transiente completa do Gemeo Digital
+    (acoplamento forte multifisico: membrana + rede + placa, ja
+    embutida em GD['C']/`C_real`), para uma instancia de rede com
+    falhas `C_real`, e calcula o indicador energetico
+
+        E = integral_{t_i}^{t_f} P(t) dt ,   P(t) = p(t)^T 𝔸 p(t)
+
+    via a regra do trapezio (np.trapz), integrando a potencia
+    hidraulica instantanea dissipada no reservatorio ao longo da
+    trajetoria temporal.
+
+    Retorna (E, P_hist, tempos).
+    """
+    nm = GD['nm']
+    np_net = GD['np_net']
+    n_inlet = GD['n_inlet']
+
+    Aglob_falha, A_potencia, pref = MontaSistemaFalho(GD, C_real, dt)
+
+    p_inlet_adim = p_inlet_dim / pref
+
+    w_n = np.zeros(nm)
+    v_n = np.zeros(nm)
+
+    tempos = np.arange(t_i, t_max + 0.5 * dt, dt)
+    P_hist = np.empty(tempos.shape[0])
+
+    for i in range(tempos.shape[0]):
+        w_n, v_n, p_n = Resolve_Passo_Tempo(
+            Aglob_falha, GD['M_mem'], w_n, v_n, p_inlet_adim, dt, nm, np_net, n_inlet
+        )
+        P_hist[i] = p_n @ (A_potencia @ p_n)
+
+    E = _integral_trapezoidal(P_hist, dx=dt)
+    return E, P_hist, tempos
 
 
+def MonteCarloEnergiaDinamica(GD, pO, fObs, dt, N, t_max=4.0,
+                               p_inlet_dim=None, E_critico=7.0,
+                               rng=None, retornar_amostras=False,
+                               imprimir_progresso=True):
+    """
+    Executa N realizacoes de Monte Carlo do GD COMPLETO (acoplamento
+    forte multifisico, Secao 6.3.2, Item 2), cada uma com uma instancia
+    de falha estocastica distinta dos microcanais (RandomFail, mesma
+    hipotese p_O / f_obs do Item 1), avaliando se a energia total
+    dissipada E fica abaixo do limite critico `E_critico`.
 
+    Retorna a probabilidade estimada Prob(E < E_critico) e,
+    opcionalmente (retornar_amostras=True), o vetor completo das N
+    amostras de E (util para histogramas e analises adicionais).
+    """
+    if p_inlet_dim is None:
+        p_inlet_dim = GD['params']['p_inlet_dim']
+    if rng is None:
+        rng = np.random.default_rng()
+
+    C_nominal = GD['C']
+    E_amostras = np.empty(N)
+
+    t0 = time.time()
+    passo_print = max(1, N // 20)
+    for i in range(N):
+        C_real = RandomFail(C_nominal, pO, fObs, rng)
+        E_amostras[i], _, _ = SimulaEnergiaDissipada(GD, C_real, dt, t_max, p_inlet_dim)
+        if imprimir_progresso and (i + 1) % passo_print == 0:
+            decorrido = time.time() - t0
+            print(f"      ... {i + 1}/{N} realizacoes (f_obs={fObs}, dt={dt}) "
+                  f"- {decorrido:.1f}s decorridos")
+
+    prob = float(np.mean(E_amostras < E_critico))
+    if retornar_amostras:
+        return prob, E_amostras
+    return prob
+
+
+def RodaExercicio2_AnaliseDinamica(GD, E_critico=7.0, pO=0.6,
+                                    fObs_lista=(5, 10), dt_lista=(0.05, 0.1),
+                                    N=2000, t_max=4.0, p_inlet_dim=None,
+                                    semente=123):
+    """
+    Resolve o Exercicio 2 da Secao 6.3.2 do PDF (Analise Dinamica do
+    Gemeo Digital Completo):
+
+        - Acoplamento forte multifisico completo (membrana 51x51 +
+          rede hidraulica + placa termica, ja embutidos em `GD`);
+        - Falha estocastica dos microcanais sob probabilidade
+          individual p_O (mesma RandomFail() do Item 1);
+        - Indicador energetico E = integral_0^4 P(t) dt, com
+          P(t) = p(t)^T 𝔸 p(t);
+        - Estima Prob(E < E_critico) para dt = 0.05 e dt = 0.1, com
+          N = 2000 realizacoes cada, contrastando dois fatores de
+          severidade de obstrucao f_obs = 5 e f_obs = 10 (mesmos
+          valores investigados no Exercicio 1).
+
+    NOTA SOBRE p_O: o enunciado do Item 2 nao especifica um novo valor
+    para p_O (apenas diz "mantendo a hipotese de falha sob
+    probabilidade individual p_O"), entao adota-se aqui, por padrao, o
+    MESMO cenario representativo ja usado no estudo de convergencia do
+    Exercicio 1 (p_O = 0.6). Ajuste o argumento `pO` se um valor
+    diferente for desejado.
+
+    Retorna um dicionario com todos os resultados numericos gerados,
+    indexados por (f_obs, dt).
+    """
+    if p_inlet_dim is None:
+        p_inlet_dim = GD['params']['p_inlet_dim']
+
+    prob_dict = {}
+    amostras_dict = {}
+
+    contador_semente = 0
+    for fObs in fObs_lista:
+        for dt in dt_lista:
+            print(f"\n[Exercicio 2] Rodando MC dinamico: f_obs={fObs}, dt={dt}, "
+                  f"N={N} realizacoes (p_O={pO}) ...")
+            rng = np.random.default_rng(semente + contador_semente)
+            contador_semente += 1
+
+            prob, E_amostras = MonteCarloEnergiaDinamica(
+                GD, pO, fObs, dt, N, t_max=t_max, p_inlet_dim=p_inlet_dim,
+                E_critico=E_critico, rng=rng, retornar_amostras=True
+            )
+            prob_dict[(fObs, dt)] = prob
+            amostras_dict[(fObs, dt)] = E_amostras
+            print(f"   -> Prob(E < {E_critico}) = {prob * 100:.2f}%   "
+                  f"(E_medio={E_amostras.mean():.3f}, "
+                  f"E_min={E_amostras.min():.3f}, E_max={E_amostras.max():.3f})")
+
+    resultados = dict(
+        E_critico=E_critico, pO=pO, fObs_lista=fObs_lista,
+        dt_lista=dt_lista, N=N, t_max=t_max,
+        prob=prob_dict, amostras=amostras_dict,
+    )
+    return resultados
+
+def PlotaExercicio2_AnaliseDinamica(resultados, save_path=None):
+    """
+    Gera um painel com dois graficos comparativos para o Exercicio 2:
+
+        (a) Prob(E < E_critico) em funcao do passo de tempo dt,
+            contrastando os dois fatores de severidade f_obs;
+        (b) Histogramas sobrepostos da distribuicao amostral de E para
+            cada combinacao (f_obs, dt), permitindo visualizar o
+            impacto do passo de tempo na precisao estatistica do
+            estimador (dispersao da amostra em torno do limite
+            E_critico).
+    """
+    fObs_lista = resultados['fObs_lista']
+    dt_lista = resultados['dt_lista']
+    E_critico = resultados['E_critico']
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+    cores = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+    # --- (a) Prob(E<E_critico) vs dt, para cada f_obs --------------------
+    ax1 = axes[0]
+    for i, fObs in enumerate(fObs_lista):
+        probs = [resultados['prob'][(fObs, dt)] * 100.0 for dt in dt_lista]
+        ax1.plot(dt_lista, probs, 'o-', color=cores[i % len(cores)],
+                  linewidth=1.8, markersize=8, label=fr'$f_{{obs}}$ = {fObs}')
+    ax1.set_xlabel(r'Passo de tempo, $\delta t$')
+    ax1.set_ylabel(fr'Prob($E < {E_critico}$)  (%)')
+    ax1.set_title("Análise Dinâmica do GD Completo\n"
+                  fr"($p_O$={resultados['pO']}, N={resultados['N']} por ponto)")
+    ax1.set_xticks(dt_lista)
+    ax1.grid(True, linestyle=':', alpha=0.6)
+    ax1.legend()
+
+    # --- (b) Histograma da energia dissipada E, por combinacao ----------
+    ax2 = axes[1]
+    estilos_dt = ['-', '--', '-.', ':']
+    for i, fObs in enumerate(fObs_lista):
+        for j, dt in enumerate(dt_lista):
+            E_amostras = resultados['amostras'][(fObs, dt)]
+            ax2.hist(E_amostras, bins=40, histtype='step', linewidth=1.6,
+                      color=cores[i % len(cores)],
+                      linestyle=estilos_dt[j % len(estilos_dt)],
+                      label=fr'$f_{{obs}}$={fObs}, $\delta t$={dt}')
+    ax2.axvline(E_critico, color='black', linestyle=':', linewidth=1.8,
+                label=fr'$E_{{crítico}}$ = {E_critico}')
+    ax2.set_xlabel('Energia dissipada total, E')
+    ax2.set_ylabel('Frequência (contagem de realizações)')
+    ax2.set_title('Distribuição amostral de E')
+    ax2.grid(True, linestyle=':', alpha=0.5)
+    ax2.legend(fontsize=8)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=200, bbox_inches='tight')
+    plt.show()
+    return fig
 
 
 # ==============================================================================
-# SEÇÃO 6.4.3 - APRENDIZADO DE MODELOS (INTERPOLAÇÃO E REGRESSÃO) (EXERCÍCIOS 1 E 2)
+# SECAO 6.4.3 Investigando o comportamento do sistema via aproximação de dados
 # ==============================================================================
+
+# ========================================================================
+# SEÇÃO 6.4.3 - EXERCÍCIO 1
+# Interpolação Linear Local
+# ========================================================================
 
 def Interpola_Potencia_Linear(t_dados, P_dados):
     """ 
@@ -773,9 +973,52 @@ def Interpola_Potencia_Linear(t_dados, P_dados):
     """
     return interp1d(t_dados, P_dados, kind='linear')
 
+
+# ========================================================================
+# SEÇÃO 6.4.3 - EXERCÍCIO 2
+# Interpolação Cúbica Local
+# ========================================================================
+
 def Interpola_Potencia_Cubica(t_dados, P_dados):
     """ 
     Exercício 2: Interpolação Cúbica Local (Splines cúbicos).
     Retorna uma função avaliável garantindo suavidade nas interfaces.
     """
     return interp1d(t_dados, P_dados, kind='cubic')
+
+
+# ========================================================================
+# # SEÇÃO 6.4.3 - EXERCÍCIO 3
+# Regressão Polinomial Global
+# ========================================================================
+
+# parte da nat vai aqui
+
+# ========================================================================
+# SEÇÃO 6.4.3 - EXERCÍCIO 4
+# Análise de Sensibilidade a Ruídos Estocásticos
+# ========================================================================
+
+# parte da nat vai aqui
+
+# ==============================================================================
+# SEÇÃO 6.4.5 Investigando o comportamento do sistema via diferenciação numérica
+# ==============================================================================
+
+# ========================================================================
+# SEÇÃO 6.4.5 - EXERCÍCIO 1
+# Análise Numérica de Sensibilidade
+# ========================================================================
+
+# parte do zuffo vai aqui
+
+# ========================================================================
+# SEÇÃO 6.4.5 - EXERCÍCIO 2
+#  Localização de Raízes via Newton-Raphson
+# ========================================================================
+
+# parte do antero vai aqui
+
+# =======================================================================================
+# CONCLUSÃO
+# =======================================================================================

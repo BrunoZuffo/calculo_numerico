@@ -1,43 +1,12 @@
-"""
-mainGD.py
-----------------------------------------------------------------------
-CAPITULO 6 - O GEMEO DIGITAL (GD)
-
-Este script monta a BASE COMPLETA do Gemeo Digital, integrando os tres
-subsistemas fisicos desenvolvidos ao longo da disciplina:
-
-    1) Placa Termica      (Capitulo 2 / Capitulo 4 - parte 2)
-    2) Rede Hidraulica     (Capitulo 1 / Capitulo 4 - parte 1)
-    3) Membrana Elastica   (Capitulo 3)
-
-acoplados monoliticamente conforme a abordagem do Capitulo 5, com as
-especificacoes nominais definidas na Secao 6.2 do PDF da disciplina.
-
-IMPORTANTE: este script resolve apenas a MONTAGEM e VERIFICACAO da
-base do sistema (Secoes 6.1 e 6.2). Os exercicios de investigacao das
-Secoes 6.3 (Predicoes sob Incerteza - Amostragem Monte Carlo) e 6.4
-(Aprendizado de Modelos - Interpolacao, Minimos Quadrados e Zeros de
-Funcao) devem ser implementados em sequencia, reaproveitando o
-dicionario `GD` e a funcao `RodaSimulacaoBase` montados aqui. Pontos de
-entrada sugeridos estao marcados ao final do arquivo.
-"""
-
 import os
 import sys
 import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 
-# Garantindo que TODAS as pastas-irmas (RedeHidraulica, PlacaTermica,
-# MembranaElastica, AcoplamentoHidraulicoTermico, AcoplamentoHidraulicoMecanico)
-# fiquem diretamente visiveis no sys.path. Isso e necessario porque
-# functionsHM.py (e possivelmente outros modulos) fazem imports
-# "achatados" internamente (ex.: "from functions import ...",
-# "from functionsM import ..."), que so resolvem se a pasta de cada
-# modulo estiver diretamente no path - nao basta adicionar apenas a
-# pasta-mae calculo_numerico.
-diretorio_atual = os.path.dirname(os.path.abspath(__file__))   # .../GemeoDigital
-diretorio_pai = os.path.dirname(diretorio_atual)                # .../calculo_numerico
+diretorio_atual = os.path.dirname(os.path.abspath(__file__))  
+diretorio_pai = os.path.dirname(diretorio_atual)              
 
 SUBPASTAS_PROJETO = [
     "RedeHidraulica",
@@ -50,7 +19,6 @@ SUBPASTAS_PROJETO = [
 if diretorio_pai not in sys.path:
     sys.path.insert(0, diretorio_pai)
 
-from functionsGD import Setup_Base_GD, GD_Gera_Condutancias_Nominais, GD_Avalia_Vazao_Falhas, Interpola_Potencia_Linear, Interpola_Potencia_Cubica
 for _sub in SUBPASTAS_PROJETO:
     _caminho_sub = os.path.join(diretorio_pai, _sub)
     if os.path.isdir(_caminho_sub) and _caminho_sub not in sys.path:
@@ -59,10 +27,13 @@ for _sub in SUBPASTAS_PROJETO:
 from GemeoDigital.functionsGD import (
     MontaGemeoDigital, RodaSimulacaoBase, PlotaEstadoBaseGD,
     RodaExercicio1_FalhasHidraulicas, PlotaExercicio1_FalhasHidraulicas,
+    RodaExercicio2_AnaliseDinamica, PlotaExercicio2_AnaliseDinamica,
+    SimulaEnergiaDissipada, Interpola_Potencia_Linear, 
+    Interpola_Potencia_Cubica
 )
 
 # ==============================================================================
-# 1. ESPECIFICACOES NOMINAIS DOS SUBSISTEMAS (Secao 6.2 do PDF)
+# DEFINIÇÃO DOS PARÂMETROS INICIAIS DO SISTEMA
 # ==============================================================================
 
 params = {}
@@ -119,6 +90,7 @@ t_max_verificacao = 12.0
 # ==============================================================================
 # 2. MONTAGEM COMPLETA DO GEMEO DIGITAL
 # ==============================================================================
+
 print("=" * 80)
 print("MONTAGEM DA BASE DO GEMEO DIGITAL (Capitulo 6)")
 print("=" * 80)
@@ -161,18 +133,19 @@ GD = MontaGemeoDigital(params)
 
 
 
+# =======================================================================================
+# EXERCÍCIOS - CAPÍTULO 6
+# =======================================================================================
 
-
-
-
-#
-# Subsistema ISOLADO (apenas Rede Hidráulica + Placa Térmica, em regime
-# permanente, sem a membrana). Pressão de descarga nula no Outlet
-# (p_outlet = 0). Pergunta de projeto: qual a probabilidade de que,
-# após o desgaste operacional (obstrução estocástica dos microcanais),
-# a vazão total de entrada q_inlet (nó 0) fique abaixo do limite
-# crítico 1.25e-5 ?
 # ==============================================================================
+# SECAO 6.3.2 -  Investigando o comportamento do sistema via Monte Carlo
+# ==============================================================================
+
+# ========================================================================
+# SECAO 6.3.2 - EXERCICIO 1
+# Análise Estacionária de Falhas Hidráulicas
+# ========================================================================
+
 print("\n" + "=" * 80)
 print("EXERCÍCIO 1 (Seção 6.3.2) - Análise Estacionária de Falhas Hidráulicas")
 print("=" * 80)
@@ -239,43 +212,69 @@ print("EXERCÍCIO 1 (Seção 6.3.2) CONCLUÍDO.")
 print("=" * 80)
 
 # ==============================================================================
-# PRÓXIMOS PASSOS: DEMAIS EXERCÍCIOS DE INVESTIGAÇÃO
-#
-#   Seção 6.3.2, Item 2 - Análise Dinâmica do Gêmeo Digital Completo
-#       (acoplamento forte multifísico, malha 51x51, indicador
-#       energético E = integral de P(t) dt, malha temporal dt=0.05/0.1)
-#
-#   Seção 6.4.3 / 6.4.5 - Investigando o comportamento via aproximação
-#       de dados e diferenciação numérica
-#       - Reaproveitar GD['Aglob'], RodaSimulacaoBase(...) variando H_k
-#         para gerar a família de curvas p(t; H) e ajustar/derivar A(H)
+# SEÇÃO 6.3.2 - EXERCÍCIO 2
+# Análise Dinâmica do Gêmeo Digital Completo
 # ==============================================================================
 
+print("\n" + "=" * 80)
+print("EXERCÍCIO 2 (Seção 6.3.2) - Análise Dinâmica do Gêmeo Digital")
+print("=" * 80)
 
+E_critico = 7.0
+N_dinamica = 2000  
 
+resultados_ex2 = RodaExercicio2_AnaliseDinamica(
+    GD,
+    E_critico=E_critico,
+    pO=pO_convergencia,          # mesmo cenário representativo do Exercício 1 (p_O = 0.6)
+    fObs_lista=(5, 10),
+    dt_lista=(0.05, 0.1),
+    N=N_dinamica,
+    t_max=4.0,
+)
 
+caminho_fig_ex2 = os.path.join(diretorio_atual, "ex2_analise_dinamica.png")
+PlotaExercicio2_AnaliseDinamica(resultados_ex2, save_path=caminho_fig_ex2)
 
+print(f"\nFigura do Exercício 2 salva em:\n  {caminho_fig_ex2}")
 
+print(f"\nResumo do Exercício 2 (N = {resultados_ex2['N']} por combinação):")
+for fObs in resultados_ex2['fObs_lista']:
+    for dt in resultados_ex2['dt_lista']:
+        prob = resultados_ex2['prob'][(fObs, dt)]
+        print(f"  f_obs={fObs:<3d}  dt={dt:<5}  ->  "
+              f"Prob(E < {E_critico}) = {prob * 100:.2f}%")
 
-
+print("\n" + "=" * 80)
+print("EXERCÍCIO 2 (Seção 6.3.2) CONCLUÍDO.")
+print("=" * 80)
 
 
 # ==============================================================================
-# SEÇÃO 6.4.3: INTERPOLAÇÃO DE DADOS (EXERCÍCIOS 1 E 2)
+# SECAO 6.4.3 Investigando o comportamento do sistema via aproximação de dados
 # ==============================================================================
+
+# ========================================================================
+# SEÇÃO 6.4.3 - EXERCÍCIO 1
+# Interpolação Linear Local
+# SEÇÃO 6.4.3 - EXERCÍCIO 2
+# Interpolação Cúbica Local
+# ========================================================================
+
 print("\n" + "-"*85)
-print(" EXERCÍCIOS 1 E 2 (6.4.3): INTERPOLAÇÃO LINEAR E CÚBICA DA POTÊNCIA")
+print(" EXERCÍCIOS 1 E 2 (Seção 6.4.3): Interpolação linear e cúbca da potência")
 print("-" * 85)
 
 # 1. Definindo o vetor de tempo conforme exigido: t em [0, 4] com dt = 0.05
 dt = 0.05
-t_dados = np.arange(0, 4.0 + dt, dt)
+t_max_interp = 4.0
 
-# 2. Dados da Simulação:
-# AVISO: Como o loop dinâmico (6.3.2 Ex 2) é um TODO, vamos gerar uma curva 
-# de "dados fictícios" (dummy data) imitando a flutuação e estabilização do sistema.
-# Quando a dinâmica real estiver pronta, basta substituir P_dados pelos seus dados reais.
-P_dados = 10.0 * (1.0 - np.exp(-1.5 * t_dados)) * (1.0 + 0.1 * np.sin(5 * t_dados))
+print("-> Simulando a trajetória nominal (sem falhas) do GD completo "
+      f"para obter P(t) em [0, {t_max_interp}] com δt = {dt}...")
+_E_nominal, P_dados, t_dados = SimulaEnergiaDissipada(
+    GD, GD['C'], dt, t_max_interp, params['p_inlet_dim']
+)
+print(f"   Energia dissipada nominal: E = {_E_nominal:.4f}")
 
 # 3. Gerando os modelos de interpolação
 print("-> Construindo Splines Lineares (Ex 1)...")
@@ -285,7 +284,7 @@ print("-> Construindo Splines Cúbicos (Ex 2)...")
 interpolador_cubico = Interpola_Potencia_Cubica(t_dados, P_dados)
 
 # 4. Avaliando os modelos em uma malha temporal bem fina para ver a "suavidade"
-t_fino = np.linspace(0, 4.0, 500)
+t_fino = np.linspace(t_dados[0], t_dados[-1], 500)
 P_linear = interpolador_linear(t_fino)
 P_cubico = interpolador_cubico(t_fino)
 
@@ -311,12 +310,91 @@ caminho_salvar_interp = os.path.join(diretorio_atual, "interpolacao_potencia_ex1
 plt.savefig(caminho_salvar_interp, dpi=300)
 print(f"✓ Gráfico de interpolação salvo em: {caminho_salvar_interp}")
 
-# Zoom adicional automático para facilitar a comparação visual do "ganho de suavidade"
-ax.set_xlim(1.0, 2.0)
-ax.set_ylim(8.0, 12.0)
-ax.set_title("Zoom (1.0 a 2.0s) - Analisando Suavidade nas Interfaces", fontweight='bold')
+t_zoom_ini = t_dados[0] + 0.25 * (t_dados[-1] - t_dados[0])
+t_zoom_fim = t_dados[0] + 0.50 * (t_dados[-1] - t_dados[0])
+mascara_zoom = (t_fino >= t_zoom_ini) & (t_fino <= t_zoom_fim)
+P_zoom = np.concatenate([P_cubico[mascara_zoom], P_linear[mascara_zoom]])
+margem = 0.1 * (P_zoom.max() - P_zoom.min() + 1e-12)
+
+ax.set_xlim(t_zoom_ini, t_zoom_fim)
+ax.set_ylim(P_zoom.min() - margem, P_zoom.max() + margem)
+ax.set_title(f"Zoom ({t_zoom_ini:.2f} a {t_zoom_fim:.2f}s) - Analisando Suavidade nas Interfaces",
+             fontweight='bold')
 caminho_salvar_zoom = os.path.join(diretorio_atual, "interpolacao_potencia_zoom.png")
 plt.savefig(caminho_salvar_zoom, dpi=300)
 print(f"✓ Gráfico com zoom salvo em: {caminho_salvar_zoom}")
 
 plt.show()
+
+print("\n" + "=" * 80)
+print("EXERCÍCIOS 1 e 2 (Seção 6.4.3) CONCLUÍDO.")
+print("=" * 80)
+
+# ========================================================================
+# # SEÇÃO 6.4.3 - EXERCÍCIO 3
+# Regressão Polinomial Global
+# ========================================================================
+
+print("\n" + "-"*85)
+print(" EXERCÍCIO 3 (Seção 6.4.3): Regressão Polinomial Global")
+print("-" * 85)
+
+# parte da nat vai aqui
+
+print("\n" + "=" * 80)
+print("EXERCÍCIO 3 (Seção 6.4.3) CONCLUÍDO.")
+print("=" * 80)
+
+
+# ========================================================================
+# SEÇÃO 6.4.3 - EXERCÍCIO 4
+# Análise de Sensibilidade a Ruídos Estocásticos
+# ========================================================================
+
+print("\n" + "-"*85)
+print(" EXERCÍCIO 4 (Seção 6.4.3): Análise de Sensibilidade a Ruídos Estocásticos")
+print("-" * 85)
+
+# parte da nat vai aqui
+
+print("\n" + "=" * 80)
+print("EXERCÍCIO 4 (Seção 6.4.3) CONCLUÍDO.")
+print("=" * 80)
+
+# ==============================================================================
+# SEÇÃO 6.4.5 Investigando o comportamento do sistema via diferenciação numérica
+# ==============================================================================
+
+# ========================================================================
+# SEÇÃO 6.4.5 - EXERCÍCIO 1
+# Análise Numérica de Sensibilidade
+# ========================================================================
+
+print("\n" + "-"*85)
+print(" EXERCÍCIO 1 (Seção 6.4.5): Análise Numérica de Sensibilidade")
+print("-" * 85)
+
+# parte do zuffo vai aqui
+
+print("\n" + "=" * 80)
+print("EXERCÍCIO 1 (Seção 6.4.5) CONCLUÍDO.")
+print("=" * 80)
+
+# ========================================================================
+# SEÇÃO 6.4.5 - EXERCÍCIO 2
+# Localização de Raízes via Newton-Raphson
+# ========================================================================
+
+print("\n" + "-"*85)
+print(" EXERCÍCIO 2 (Seção 6.4.5): Localização de Raízes via Newton-Raphson")
+print("-" * 85)
+
+# parte do antero vai aqui
+
+print("\n" + "=" * 80)
+print("EXERCÍCIO 2 (Seção 6.4.5) CONCLUÍDO.")
+print("=" * 80)
+
+# =======================================================================================
+# CONCLUSÃO
+# =======================================================================================
