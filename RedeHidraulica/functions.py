@@ -62,7 +62,7 @@ def createK (C, nc):
         
     return K
 
-def createD (conec, nv,nc):
+def createD (conec, nv, nc):
    # criar a matriz D
     D = np.zeros((nc,nv))
     for k in range (nc):
@@ -107,13 +107,14 @@ def calc_potencia (conec, C, pressure):
 
 #calculo condutancia - Victor Hugo
 def CalculoCondutancia(Lk, H_k=None, mu=None):
-    pi=np.pi
-    Ak=2.5*10**(-7)
-    mi=0.001
-    Dk=np.sqrt(4*Ak/pi)
-    kk=(pi*Dk**4)/(128*mi)
-    Ck=kk/Lk #Lk é o comprimento do cano
-
+    pi = np.pi
+    Ak = 2.5 * 10**(-7)
+    # Se 'mu' não for fornecido, utiliza a viscosidade nominal da água a 20°C
+    mi = mu if mu is not None else 0.001 
+    Dk = np.sqrt(4 * Ak / pi)
+    kk = (pi * Dk**4) / (128 * mi)
+    Ck = kk / Lk
+    
     return Ck
 
 #função que calcula o comprimento do cano k (Lk) para montar o vetor de condutancias C- Matheus

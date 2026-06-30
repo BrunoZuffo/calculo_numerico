@@ -1,7 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from RedeHidraulica.functions import GeraGrafo, createD
 from functionsGD import ResolverGemeoDigital
-from ..RedeHidraulica import GeraGrafo, createD
+
 
 # =============================================================================
 # 1. ESPECIFICAÇÕES NOMINAIS DO GÊMEO DIGITAL (Ref: Seção 6.2)
@@ -37,15 +41,16 @@ params_placa = {
 # Gera o grafo de Nível 3 (como você fazia no seu Cap 3)
 Xno, conec = GeraGrafo(levels=3)
 mm_to_m = 0.001
-Xno = Xno * mm_to_m  # Convertendo para metros
+Xno = Xno * mm_to_m  
+# Convertendo para metros
 
 n_nos = len(Xno)
+n_canais = len(conec)
 n_inlet = 0
 n_outlet = n_nos - 1
 
 # Matriz de incidência (Usando a sua função createD)
-# Nota: Se o seu createD exigir apenas o 'conec', apague o ', n_nos'
-matriz_incidencia = createD(conec, n_nos) 
+matriz_incidencia = createD(conec, n_nos, n_canais) 
 
 # Coordenadas centrais de cada canal
 # O Gêmeo Digital precisa saber o "centro" de cada canal para pegar a temperatura da placa
@@ -76,7 +81,10 @@ params_rede = {
     # Aqui entram os parâmetros calculados automaticamente ali em cima!
     'matriz_incidencia': matriz_incidencia,
     'coords_canais': coords_canais,
-    'indices_canais_inlet': indices_canais_inlet
+    'indices_canais_inlet': indices_canais_inlet,
+
+    'conec': conec,
+    'Xno': Xno
 }
 
 # Dicionário da Membrana Elástica
