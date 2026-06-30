@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import spsolve
+from scipy.interpolate import interp1d
 
 # --- Importações dos Módulos Anteriores ---
 from RedeHidraulica.functions import GeraGrafo, Assembly
@@ -174,3 +175,24 @@ def GD_Avalia_Vazao_Falhas(base, C_T_nom, p_inlet=5000.0, p_fail=0.05, f_obs=100
 # ==============================================================================
 # SEÇÃO 6.3.2 (EXERCÍCIO 2)
 # ==============================================================================
+
+
+
+
+# ==============================================================================
+# SEÇÃO 6.4.3 - APRENDIZADO DE MODELOS (INTERPOLAÇÃO E REGRESSÃO) (EXERCÍCIOS 1 E 2)
+# ==============================================================================
+
+def Interpola_Potencia_Linear(t_dados, P_dados):
+    """ 
+    Exercício 1: Interpolação Linear Local (Splines lineares).
+    Retorna uma função avaliável que liga os dados por retas.
+    """
+    return interp1d(t_dados, P_dados, kind='linear')
+
+def Interpola_Potencia_Cubica(t_dados, P_dados):
+    """ 
+    Exercício 2: Interpolação Cúbica Local (Splines cúbicos).
+    Retorna uma função avaliável garantindo suavidade nas interfaces.
+    """
+    return interp1d(t_dados, P_dados, kind='cubic')
