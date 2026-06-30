@@ -1,94 +1,176 @@
 import numpy as np
+from scipy import sparse
+from scipy.sparse.linalg import spsolve
 
-from RedeHidraulica import functions as fH
-from PlacaTermica import functionsT as fT
-from MembranaElastica import functionsM as fM
+# --- Importações dos Módulos Anteriores ---
+from RedeHidraulica.functions import GeraGrafo, Assembly
+from AcoplamentoHidraulicoTermico.functionsHT import (
+    ObterCondutividadeFaces_ViaNos,
+    CriarSistemaSolidoCondutividadeVariavel,
+    calcular_temperatura_media_arestas
+)
 
-def RandomFail(condutancias_nominais, p0, fobs):
-    """
-    Aplica falhas locais randômicas nas condutâncias da rede microfluídica.
-    
-    Parâmetros:
-    - condutancias_nominais: array com as condutâncias (C) de todos os canais da rede
-    - p0: probabilidade (entre 0 e 1) de um canal sofrer obstrução
-    - fobs: fator de obstrução, o quão severa é a falha (ex: 0.5 reduz a condutância pela metade)
-    """
-    C_atualizado = condutancias_nominais.copy()
-    n_canais = len(C_atualizado)
-    
-    for i in range(n_canais):
-        # Sorteia um número entre 0 e 1 para cada canal
-        if np.random.rand() < p0:
-            C_atualizado[i] = C_atualizado[i] * fobs
-            
-    return C_atualizado
+# ==============================================================================
+# LEIS CONSTITUTIVAS (SEÇÃO 6.2)
+# ==============================================================================
+
+# ---- Parametros fisicos  --
+
+#Rede Hidráulica
+H_k = 1000e-6          # Largura seção transversal quadrada
+p_inlet = 5000.0      # Pressão no Nó de entrada
+n_inlet = 0           # Nó de entrada
+n_outlet = 5          # Nó de saída
+complex_level = 3     # Nível de complexidade da rede
+
+# Viscosidade dinâmica do fluido
+def mu(T):
+    return 0.001791 / (1 + 0.03368 * T + 0.000221 * (T**2))
+
+#Placa termica
+Lx = 0.03 
+Ly = 0.015
+k = 0.25               # Condutividade térmica
+fonte = 5*pow(10,5)    # Fonte de calor
+def h(Lx, Nx):
+  return Lx / (Nx - 1)
+TL= 10.0
+TR = 30.0
+def TB(x):
+  return 10+20*(x/Lx)
+def TT(x):
+  return 10+20*(x/Lx)
+
+#Temperatura circular:
+xc = 0.0225
+yc = 0.0075
+R = 0.0025
+TC = 35
+
+#Membrana elástica:
+
+R = 0.0025        # raio da membrana (0.25 cm)
+e = 1.0e-4        # espessura (0.1 mm)
+sigma = 200.0     # tensao membranal
+rho = 900.0       # densidade
+beta = 0.1        # Coeficiente de atrito viscoso (adimensional)
 
 
-def ResolverGemeoDigital(params_placa, params_rede, params_membrana, falha_kwargs=None):
-    """
-    Resolve a cadeia multifísica do Gêmeo Digital:
-    Passo 1 (Placa) -> Passo 2 (Rede Hidráulica) -> Passo 3 (Membrana)
+def Atualiza_Condutancias_GD(conec, Xno, L_k, T_arestas):
+    """ Calcula a condutância dos canais com D_k e A_k rigorosos. """
+    A_k = H_k * H_k  # Área da secção transversal: 500um x 500um
+    D_k = np.sqrt(4 * A_k / np.pi)
     
-    Retorna os principais Outputs/QoI (Quantities of Interest).
-    """
+    mu_k = mu(T_arestas)
+    kappa_k = (np.pi * (D_k**4)) / (128 * mu_k)
+    C_k = kappa_k / L_k
+    return C_k
+
+
+# ==============================================================================
+# SEÇÃO 6.2 - BASE DO GEMEO DIGITAL E ESTADO NOMINAL
+# ==============================================================================
+
+def Setup_Base_GD():
+    """ Configura a geometria estrita baseada na Secção 6.2. """
+    Lx_placa, Ly_placa = 0.03, 0.015  
+    Nx_term, Ny_term = 121, 61
     
-    # ---------------------------------------------------------
-    # PASSO 1: PLACA TÉRMICA
-    # ---------------------------------------------------------
-    # Resolve a placa para encontrar o campo de temperatura
-    # Adapte os nomes das funções (ex: resolver_placa_2d) para os que você criou no Cap 4
-    T_campo, malha_X, malha_Y = fT.resolver_placa(**params_placa)
+    Xno, conec = GeraGrafo(levels=3)
+    Xno = Xno * 0.001
+    Xno[:, 1] += 0.5 * Ly_placa 
     
-    # Mapeamento do campo de temperatura para o centro de cada microcanal
-    # (Ou temperatura média da placa afetando os canais, conforme a sua implementação do Cap 4/6)
-    T_canais = fT.extrair_temperatura_nos_canais(T_campo, malha_X, malha_Y, params_rede['coords_canais'])
-    
-    
-    # ---------------------------------------------------------
-    # PASSO 2: REDE HIDRÁULICA E ACOPLAMENTO TÉRMICO
-    # ---------------------------------------------------------
-    # Recalcula a viscosidade para cada canal usando a temperatura extraída
-    viscosidades = fH.calcular_viscosidade_fluido(T_canais)
-    
-    # Determina as condutâncias base da rede com a viscosidade atualizada
-    C_canais = fH.calcular_condutancias(viscosidades, params_rede['largura_canal'])
-    
-    # Condição para os testes de Monte Carlo: aplicar a falha antes da resolução
-    if falha_kwargs is not None:
-        C_canais = RandomFail(C_canais, falha_kwargs['p0'], falha_kwargs['fobs'])
+    # Pré-cálculo dos comprimentos (L_k) das arestas para eficiência
+    L_k = np.zeros(len(conec))
+    for i, c in enumerate(conec):
+        L_k[i] = np.linalg.norm(Xno[c[0]] - Xno[c[1]])
         
-    # Resolve as pressões dos nós e vazões
-    p_nos, q_canais = fH.resolver_rede_pressao(
-        C_canais, 
-        params_rede['matriz_incidencia'], 
-        params_rede['p_inlet'], 
-        params_rede['no_inlet'], 
-        params_rede['no_outlet']
+    return {
+        'Xno': Xno, 'conec': conec, 'L_k': L_k,
+        'Lx_placa': Lx_placa, 'Ly_placa': Ly_placa,
+        'Nx_term': Nx_term, 'Ny_term': Ny_term
+    }
+
+def GD_Gera_Condutancias_Nominais(base):
+    """ 
+    Resolve a física Térmica apenas uma vez para gerar as condutâncias base.
+    A temperatura não muda com as falhas hidráulicas.
+    """
+    Lx_p, Ly_p = base['Lx_placa'], base['Ly_placa']
+    Nx_t, Ny_t = base['Nx_term'], base['Ny_term']
+    Xno, conec = base['Xno'], base['conec']
+    
+    k0 = 0.25
+    fonte = 5e5
+    TC = 35.0
+    
+    d_max = 0.001
+    k_e, k_n = ObterCondutividadeFaces_ViaNos(Nx_t, Ny_t, Lx_p, Ly_p, Xno, conec, d_max, k0)
+    
+    x_c = np.linspace(0, Lx_p, Nx_t)
+    TB = 10.0 + 20.0 * (x_c / Lx_p)
+    TT = 10.0 + 20.0 * (x_c / Lx_p)
+    
+    A_T, b_T = CriarSistemaSolidoCondutividadeVariavel(
+        Nx_t, Ny_t, Lx_p, Ly_p, k_e, k_n, 
+        10.0, 30.0, TB, TT, fonte, 0.0025, 0.0225, 0.0075, TC
+    )
+    T_flat = spsolve(sparse.csr_matrix(A_T), b_T)
+    
+    T_arestas, _ = calcular_temperatura_media_arestas(
+        conec, Xno, T_flat, Nx_t, Ny_t, Lx_p, Ly_p, num_subintervalos=10
     )
     
-    # Extrai QoI (Vazão total no inlet e Pressão no outlet)
-    # Supondo que a vazão do inlet seja a soma das vazões dos canais conectados ao nó 0
-    q_inlet_total = np.sum(q_canais[params_rede['indices_canais_inlet']])
-    p_outlet = p_nos[params_rede['no_outlet']]
+    C_T_nom = Atualiza_Condutancias_GD(conec, Xno, base['L_k'], T_arestas)
     
+    return C_T_nom
+
+
+# ==============================================================================
+# SEÇÃO 6.3.2 (EXERCÍCIO 1)
+# ==============================================================================
+
+def RandomFail(C_original, p_fail, f_obs):
+    """ 
+    Aplica obstruções estocásticas de forma vetorizada e rápida.
+    """
+    C_mod = C_original.copy()
+    mask = np.random.rand(len(C_mod)) < p_fail
+    C_mod[mask] /= f_obs
+    return C_mod
+
+def GD_Avalia_Vazao_Falhas(base, C_T_nom, p_inlet=5000.0, p_fail=0.05, f_obs=100.0):
+    """ 
+    Resolve o subsistema Hidráulico sob perturbações e devolve a vazão resultante.
+    (Utilizado no Exercício 1 - Monte Carlo Estacionário).
+    """
+    # 1. Aplicação de falhas
+    C_T = RandomFail(C_T_nom, p_fail, f_obs) if p_fail > 0.0 else C_T_nom.copy()
+        
+    # 2. Montagem do Sistema
+    A_net = Assembly(base['conec'], C_T)
+    A_net_tilde = A_net.copy()
+    b_h = np.zeros(len(base['Xno']))
     
-    # ---------------------------------------------------------
-    # PASSO 3: MEMBRANA ELÁSTICA E ACOPLAMENTO MECÂNICO
-    # ---------------------------------------------------------
-    # A pressão de outlet da rede entra como carga na membrana
-    params_membrana['pressao_aplicada'] = p_outlet
+    # 3. Condições de Contorno (Pressão Fixa)
+    # Nó 0: Pressão de entrada
+    A_net_tilde[0, :] = 0.0
+    A_net_tilde[0, 0] = 1.0
+    b_h[0] = p_inlet
     
-    # Resolve a deflexão transiente no tempo
-    tempo, W_historico = fM.resolver_membrana_transiente(**params_membrana)
+    # Nó 5: Pressão de saída (atmosférica)
+    A_net_tilde[5, :] = 0.0
+    A_net_tilde[5, 5] = 1.0
+    b_h[5] = 0.0
     
-    # Extrai o QoI final: Deflexão central (w no nó 0) ao longo do tempo ou seu valor máximo/estacionário
-    w_centro_historico = W_historico[:, 0]
+    pressures = spsolve(sparse.csr_matrix(A_net_tilde), b_h)
     
-    return {
-        'T_campo': T_campo,
-        'q_inlet_total': q_inlet_total,
-        'p_outlet': p_outlet,
-        'tempo': tempo,
-        'w_centro': w_centro_historico,
-        'w_max_absoluto': np.max(np.abs(w_centro_historico))
-    }
+    # 4. Cálculo da Vazão via Álgebra Linear
+    q_inlet = A_net[0, :].dot(pressures)
+    
+    return q_inlet
+
+
+# ==============================================================================
+# SEÇÃO 6.3.2 (EXERCÍCIO 2)
+# ==============================================================================

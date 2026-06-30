@@ -1,144 +1,90 @@
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from RedeHidraulica.functions import GeraGrafo, createD
-from functionsGD import ResolverGemeoDigital
+import time
+
+diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+diretorio_pai = os.path.dirname(diretorio_atual)
+if diretorio_pai not in sys.path:
+    sys.path.insert(0, diretorio_pai)
+
+from functionsGD import Setup_Base_GD, GD_Gera_Condutancias_Nominais, GD_Avalia_Vazao_Falhas
+
+print("="*85)
+print(" GÊMEO DIGITAL - CAPÍTULO 6")
+print("="*85)
+
+# ==============================================================================
+# SEÇÃO 6.2: ESTADO NOMINAL DO SISTEMA
+# ==============================================================================
+print("\n[1/2] Configurando a base e resolvendo o campo térmico (Executado apenas 1x)...")
+t_setup = time.time()
+base_gd = Setup_Base_GD()
+C_T_nom = GD_Gera_Condutancias_Nominais(base_gd)
+print(f"✓ Base inicializada em {time.time() - t_setup:.2f} segundos.")
 
 
-# =============================================================================
-# 1. ESPECIFICAÇÕES NOMINAIS DO GÊMEO DIGITAL (Ref: Seção 6.2)
-# =============================================================================
+# ==============================================================================
+# SEÇÃO 6.3.2 (EXERCÍCIO 1): COMPORTAMENTO ASSINTÓTICO (Prob vs p_fail)
+# ==============================================================================
+print("\n" + "-"*85)
+print(" EXERCÍCIO 1: PROBABILIDADE DE FALHA DA VAZÃO vs P_FAIL")
+print("-" * 85)
 
-# Constantes geométricas
-Lx = 0.03   # 3 cm
-Ly = 0.015  # 1.5 cm
+N_simulacoes = 1000  # Tamanho amostral convergido
+q_critico = 1.25e-5 
+p_inlet = 5000.0    
 
-# Dicionário da Placa Térmica
-params_placa = {
-    'Lx': Lx,
-    'Ly': Ly,
-    'k_cond': 0.25,        # Condutividade Térmica W/(K m)
-    'Q_fonte': 5e5,        # Geração de calor W/m^3
-    'T_L': 10.0,           # Borda Esquerda (Celsius)
-    'T_R': 30.0,           # Borda Direita (Celsius)
-    # Condições de contorno dependentes da posição x
-    'T_B_func': lambda x: 10 + 20 * (x / Lx),
-    'T_T_func': lambda x: 10 + 20 * (x / Lx),
-    
-    # Região interna restrita circular
-    'circ_xc': 0.0225,     # 2.25 cm
-    'circ_yc': 0.0075,     # 0.75 cm
-    'circ_raio': 0.0025,   # 0.25 cm
-    'circ_T': 35.0,        # Fixo em 35 Celsius
-    
-    # Parâmetros numéricos da malha da placa
-    'nx': 150, 
-    'ny': 75
-}
+# Domínio exigido pelo PDF: p_fail em [0.05, 0.65]
+p_fails = np.linspace(0.05, 0.65, 13)
 
-# Gera o grafo de Nível 3 (como você fazia no seu Cap 3)
-Xno, conec = GeraGrafo(levels=3)
-mm_to_m = 0.001
-Xno = Xno * mm_to_m  
-# Convertendo para metros
+# Dois fatores de severidade de obstrução distintos exigidos
+fatores_obstrucao = [5.0, 10.0]
 
-n_nos = len(Xno)
-n_canais = len(conec)
-n_inlet = 0
-n_outlet = n_nos - 1
+# Dicionário para guardar as duas curvas do gráfico
+resultados_prob = {5.0: [], 10.0: []}
 
-# Matriz de incidência (Usando a sua função createD)
-matriz_incidencia = createD(conec, n_nos, n_canais) 
+print(f"Iniciando varredura estocástica (Isso executará {len(p_fails) * 2 * N_simulacoes} simulações rápidas)...")
+t0 = time.time()
 
-# Coordenadas centrais de cada canal
-# O Gêmeo Digital precisa saber o "centro" de cada canal para pegar a temperatura da placa
-# O centro é simplesmente a média entre as coordenadas (x,y) dos dois nós do canal
-n_canais = len(conec)
-coords_canais = np.zeros((n_canais, 2))
+for f_obs in fatores_obstrucao:
+    print(f"\n-> Analisando fator de severidade f_obs = {f_obs}")
+    for p_fail in p_fails:
+        falhas_acumuladas = 0
+        
+        # Roda o Monte Carlo N vezes para este ponto específico do gráfico
+        for _ in range(N_simulacoes):
+            q_in = GD_Avalia_Vazao_Falhas(base_gd, C_T_nom, p_inlet, p_fail, f_obs)
+            if q_in < q_critico:
+                falhas_acumuladas += 1
+                
+        prob_convergida = falhas_acumuladas / N_simulacoes
+        resultados_prob[f_obs].append(prob_convergida)
+        print(f"   p_fail = {p_fail:.2f} | Probabilidade = {prob_convergida:.2%}")
 
-for i in range(n_canais):
-    # Pega os índices dos nós inicial e final do canal 'i'
-    n1, n2 = int(conec[i, 0]), int(conec[i, 1])
-    
-    # Faz a média do X e a média do Y
-    coords_canais[i, 0] = (Xno[n1, 0] + Xno[n2, 0]) / 2.0
-    coords_canais[i, 1] = (Xno[n1, 1] + Xno[n2, 1]) / 2.0
+print(f"\n✓ Varredura estocástica concluída em {time.time() - t0:.2f} segundos.")
 
-# Índices dos canais ligados ao Inlet (Nó 0)
-# Busca na matriz 'conec' quais linhas possuem o nó 0
-indices_canais_inlet = np.where((conec[:, 0] == n_inlet) | (conec[:, 1] == n_inlet))[0].tolist()
+# --- Renderização Gráfica do 3º Bullet Point ---
+fig, ax = plt.subplots(figsize=(8, 5.5))
 
-# Dicionário da Rede Hidráulica
-params_rede = {
-    'nivel_complexidade': 3,
-    'largura_canal': 1000e-6,      # 1000 micrometros em metros
-    'p_inlet': 5000.0,             # Pressão no nó 0 em Pascal
-    'no_inlet': n_inlet,
-    'no_outlet': n_outlet,
-    
-    # Aqui entram os parâmetros calculados automaticamente ali em cima!
-    'matriz_incidencia': matriz_incidencia,
-    'coords_canais': coords_canais,
-    'indices_canais_inlet': indices_canais_inlet,
+# Plota as duas curvas com as formatações clássicas
+ax.plot(p_fails, resultados_prob[5.0], 's-', color='dodgerblue', linewidth=2, label='$f_{obs} = 5$')
+ax.plot(p_fails, resultados_prob[10.0], 'o-', color='darkorange', linewidth=2, label='$f_{obs} = 10$')
 
-    'conec': conec,
-    'Xno': Xno
-}
+ax.set_title("Probabilidade de Falha Global vs Obstrução Individual", fontweight='bold')
+ax.set_xlabel("Probabilidade de obstrução individual ($p_{fail}$)")
+ax.set_ylabel("Prob. Global Convergida P($Q_{inlet} < 1.25\\times 10^{-5}$)")
+ax.grid(True, linestyle='--', alpha=0.6)
+ax.legend(fontsize=11)
 
-# Dicionário da Membrana Elástica
-params_membrana = {
-    'R': 0.0025,           # Raio 0.25 cm
-    'h_espessura': 0.1e-3, # 0.1 mm
-    'rho': 900.0,          # Densidade kg/m^3
-    'tau': 200.0,          # Tensão mecânica N/m
-    'beta_hat': 0.1,       # Atrito viscoso adimensional
-    
-    # Parâmetros numéricos para a integração temporal e espacial
-    'dt': 1e-4,            # Passo de tempo
-    't_final': 0.1,        # Tempo final de observação
-    'nr': 51               # Quantidade de nós na malha radial
-}
+plt.tight_layout()
+caminho_salvar = os.path.join(diretorio_atual, "monte_carlo_p_fail_comparativo.png")
+plt.savefig(caminho_salvar, dpi=300)
+print(f"✓ Gráfico comparativo salvo em: {caminho_salvar}")
+plt.show()
 
-
-# =============================================================================
-# 2. VALIDAÇÃO NOMINAL (SINGLE RUN)
-# =============================================================================
-
-if __name__ == "__main__":
-    
-    print("Iniciando a validação do Gêmeo Digital (Condição Nominal sem falhas)...")
-    
-    # Substitua os "None" no params_rede pelas matrizes geradas pela sua malha de Nível 3
-    # Exemplo: params_rede['matriz_incidencia'] = np.loadtxt('matriz_nivel3.csv')
-    
-    # Execução única
-    resultados = ResolverGemeoDigital(
-        params_placa=params_placa,
-        params_rede=params_rede,
-        params_membrana=params_membrana,
-        falha_kwargs=None # Estado Ideal, sem falhas
-    )
-    
-    # Coletando os QoIs nominais para baseline
-    q_in_nom = resultados['q_inlet_total']
-    p_out_nom = resultados['p_outlet']
-    w_max_nom = resultados['w_max_absoluto']
-    
-    print("\n--- RESULTADOS NOMINAIS ---")
-    print(f"Vazão de Entrada (Q_in): {q_in_nom:.4e} m³/s")
-    print(f"Pressão no Outlet (p_out): {p_out_nom:.2f} Pa")
-    print(f"Deflexão Máxima da Membrana (W_max): {w_max_nom:.4e} m")
-    
-    # Plotagem simples para validar a dinâmica da membrana
-    plt.figure(figsize=(8, 5))
-    plt.plot(resultados['tempo'], resultados['w_centro'], color='blue', linewidth=2)
-    plt.title('Dinâmica Nominal da Membrana (Acoplada)')
-    plt.xlabel('Tempo (s)')
-    plt.ylabel('Deflexão no Centro (m)')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-    print("\nO Gêmeo Digital está montado. A arquitetura está pronta para receber o loop de Monte Carlo no main.")
+# ==============================================================================
+# SEÇÃO 6.3.2 (EXERCÍCIO 2): MONTE CARLO DINÂMICO (ESPAÇO RESERVADO)
+# ==============================================================================
+# TODO: Implementar posteriormente a varredura temporal para avaliar E_total < 7.0
