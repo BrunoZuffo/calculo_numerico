@@ -98,40 +98,6 @@ print("=" * 80)
 print("Construindo Placa Termica, Rede Hidraulica e Membrana Elastica...")
 GD = MontaGemeoDigital(params)
 
-#   print(f"\nRede hidraulica gerada com {GD['Xno'].shape[0]} nos e {GD['conec'].shape[0]} canos.")
-#   print(f"Temperatura minima/maxima na placa: {GD['T_solid_flat'].min():.2f} °C / {GD['T_solid_flat'].max():.2f} °C")
-#   print(f"Viscosidade minima/maxima nos canais: {GD['mu_arestas'].min():.4e} / {GD['mu_arestas'].max():.4e} Pa.s")
-#   print(f"Condutancia minima/maxima dos canais: {GD['C'].min():.4e} / {GD['C'].max():.4e}")
-#   print(f"Pressao de referencia (pref): {GD['pref']:.4f} Pa")
-#   print(f"Velocidade de referencia (vref): {GD['vref']:.4e}")
-#   
-#   # ==============================================================================
-#   # 3. SIMULACAO TRANSIENTE DE VERIFICACAO
-#   # ==============================================================================
-#   print("\nExecutando simulacao transiente de verificacao da base do GD...")
-#   historico = RodaSimulacaoBase(GD, t_max=t_max_verificacao, p_inlet_dim=params['p_inlet_dim'])
-#   
-#   print(f"Pressao final no Outlet: {historico['p_out'][-1]:.4f} Pa")
-#   print(f"Vazao adimensional final no Outlet: {historico['q_out'][-1]:.4e}")
-#   print(f"Deslocamento final no centro da membrana: {historico['w_centro'][-1]*1e6:.4f} µm")
-#   
-#   # ==============================================================================
-#   # 4. VISUALIZACAO DE VERIFICACAO
-#   # ==============================================================================
-#   PlotaEstadoBaseGD(GD, historico)
-#   
-#   print("\n" + "=" * 80)
-#   print("BASE DO GEMEO DIGITAL MONTADA E VERIFICADA COM SUCESSO.")
-#   print("Pronta para os exercicios das Secoes 6.3 (Monte Carlo) e")
-#   print("6.4 (Interpolacao / Regressao / Zeros de Funcao).")
-#   print("=" * 80)
-
-# ==============================================================================
-# 5. EXERCÍCIO 1 (Seção 6.3.2) - ANÁLISE ESTACIONÁRIA DE FALHAS HIDRÁULICAS
-# ==============================================================================
-# TODO: Implementar posteriormente a varredura temporal para avaliar E_total < 7.0
-
-
 
 # =======================================================================================
 # EXERCÍCIOS - CAPÍTULO 6
@@ -153,21 +119,6 @@ print("=" * 80)
 # Limite crítico de vazão de entrada, conforme a "Pergunta de Projeto" do PDF
 q_critico = 1.25e-5
 
-# (b) Estudo de convergência: progressão de Prob(N) para um cenário
-#     representativo de obstrução (p_O = 0.6, mesmo valor do exemplo
-#     ilustrativo do PDF), contrastando f_obs = 5 e f_obs = 10.
-#
-#     N_convergencia = 8000 (em vez de 5000): com margem_alvo = 0.01
-#     (1 ponto percentual, padrao da funcao DeterminaTamanhoAmostral-
-#     Estabilizacao), o N necessario para phat ~ 0.835 (f_obs=5) fica
-#     em torno de 5300 realizacoes - ou seja, com N_convergencia=5000
-#     o criterio NUNCA era de fato atingido dentro da amostra, e o
-#     N_min reportado ficava artificialmente preso no limite superior
-#     (N_min = N_convergencia), nao representando uma estabilizacao
-#     real. Com N_convergencia = 8000 ha margem suficiente para os
-#     dois fatores de severidade (f_obs=5 e f_obs=10) estabilizarem
-#     dentro do intervalo simulado, na ordem de grandeza de "algumas
-#     milhares de realizacoes" mencionada no PDF.
 N_convergencia = 8000
 pO_convergencia = 0.6
 
