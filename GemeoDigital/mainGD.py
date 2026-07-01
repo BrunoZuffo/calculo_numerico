@@ -28,8 +28,9 @@ from GemeoDigital.functionsGD import (
     MontaGemeoDigital, RodaSimulacaoBase, PlotaEstadoBaseGD,
     RodaExercicio1_FalhasHidraulicas, PlotaExercicio1_FalhasHidraulicas,
     RodaExercicio2_AnaliseDinamica, PlotaExercicio2_AnaliseDinamica,
-    SimulaEnergiaDissipada, Interpola_Potencia_Linear, 
-    Interpola_Potencia_Cubica
+    SimulaEnergiaDissipada, Interpola_Potencia_Linear,
+    Interpola_Potencia_Cubica, Regressao_Polinomial_Global,
+    SimulaEnergiaDissipada_Ruidosa, Analise_Ruido_Estocastico,
 )
 
 # ==============================================================================
@@ -172,7 +173,7 @@ print("EXERCÍCIO 2 (Seção 6.3.2) - Análise Dinâmica do Gêmeo Digital")
 print("=" * 80)
 
 E_critico = 7.0
-N_dinamica = 2000  
+N_dinamica = 10  
 
 resultados_ex2 = RodaExercicio2_AnaliseDinamica(
     GD,
@@ -287,15 +288,59 @@ print("=" * 80)
 # ========================================================================
 
 print("\n" + "-"*85)
-print(" EXERCÍCIO 3 (Seção 6.4.3): Regressão Polinomial Global")
+print(" EXERCÍCIO 3 (6.4.3): Regressão Polinomial Global (grau m ∈ [3, 15])")
 print("-" * 85)
 
-# parte da nat vai aqui
+graus_ex3 = list(range(3, 16))
 
-print("\n" + "=" * 80)
-print("EXERCÍCIO 3 (Seção 6.4.3) CONCLUÍDO.")
-print("=" * 80)
+print(f"-> Ajustando regressão polinomial global para graus m = {graus_ex3[0]} a {graus_ex3[-1]}...")
+resultados_ex3 = Regressao_Polinomial_Global(t_dados, P_dados, graus=graus_ex3)
 
+# ---- Tabela de erros L2 ----
+print(f"\n{'Grau m':>8}  {'Erro L2 (Eq. 6.14)':>20}")
+print("-" * 32)
+for m in graus_ex3:
+    print(f"{m:>8d}  {resultados_ex3['erros_L2'][m]:>20.6e}")
+
+# ---- Figura 1: curvas de aproximação sobrepostas aos dados ----
+t_fino_ex3 = np.linspace(t_dados[0], t_dados[-1], 600)
+
+fig3, ax3 = plt.subplots(figsize=(12, 6))
+ax3.plot(t_dados, P_dados, 'ko', markersize=3, label='Dados discretos ($\\delta t = 0.05$)', zorder=5)
+
+cmap_ex3 = plt.cm.rainbow(np.linspace(0, 1, len(graus_ex3)))
+for cor, m in zip(cmap_ex3, graus_ex3):
+    coefs = resultados_ex3['coeficientes'][m]
+    ax3.plot(t_fino_ex3, np.polyval(coefs, t_fino_ex3),
+             color=cor, linewidth=1.2, alpha=0.85, label=f'm = {m}')
+
+ax3.set_title("Regressão Polinomial Global — Graus m ∈ [3, 15]", fontweight='bold')
+ax3.set_xlabel("Tempo adimensional ($t$)")
+ax3.set_ylabel("Potência Instantânea $\\mathcal{P}(t)$")
+ax3.legend(fontsize=8, ncol=3, loc='upper right')
+ax3.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+
+caminho_fig_ex3 = os.path.join(diretorio_atual, "ex3_regressao_polinomial.png")
+plt.savefig(caminho_fig_ex3, dpi=300)
+print(f"\n✓ Figura das curvas de regressão salva em: {caminho_fig_ex3}")
+
+# ---- Figura 2: erro L2 vs grau ----
+fig3b, ax3b = plt.subplots(figsize=(8, 5))
+erros_lista = [resultados_ex3['erros_L2'][m] for m in graus_ex3]
+ax3b.semilogy(graus_ex3, erros_lista, 'o-', color='steelblue', linewidth=2, markersize=6)
+ax3b.set_title("Erro L2 vs. Grau do Polinômio (Regressão Global)", fontweight='bold')
+ax3b.set_xlabel("Grau $m$")
+ax3b.set_ylabel("Erro $e$ (Eq. 6.14) — escala log")
+ax3b.set_xticks(graus_ex3)
+ax3b.grid(True, linestyle='--', alpha=0.5)
+plt.tight_layout()
+
+caminho_fig_ex3b = os.path.join(diretorio_atual, "ex3_erro_L2_vs_grau.png")
+plt.savefig(caminho_fig_ex3b, dpi=300)
+print(f"✓ Figura do erro L2 salva em: {caminho_fig_ex3b}")
+
+plt.show()
 
 # ========================================================================
 # SEÇÃO 6.4.3 - EXERCÍCIO 4
@@ -303,10 +348,74 @@ print("=" * 80)
 # ========================================================================
 
 print("\n" + "-"*85)
-print(" EXERCÍCIO 4 (Seção 6.4.3): Análise de Sensibilidade a Ruídos Estocásticos")
+print(" EXERCÍCIO 4 (6.4.3): Sensibilidade a Ruídos em p_inlet(t)")
 print("-" * 85)
 
-# parte da nat vai aqui
+N_realizacoes_ex4 = 10   # número de trajetórias ruidosas
+graus_ex4 = list(range(3, 16))
+
+print(f"-> Simulando {N_realizacoes_ex4} trajetórias com p_inlet ruidosa "
+      f"[U(-0.15, 0.15)] e ajustando regressão polinomial (m ∈ [{graus_ex4[0]}, {graus_ex4[-1]}])...")
+
+resultados_ex4 = Analise_Ruido_Estocastico(
+    GD,
+    dt=dt,
+    t_max=t_max_interp,
+    p_inlet_dim=params['p_inlet_dim'],
+    graus=graus_ex4,
+    N_realizacoes=N_realizacoes_ex4,
+    seed=42,
+)
+
+tempos_ex4 = resultados_ex4['tempos']
+
+# ---- Tabela comparativa: erro médio com e sem ruído ----
+print(f"\n{'Grau m':>8}  {'Erro L2 (sem ruído)':>22}  {'Erro L2 médio (com ruído)':>26}")
+print("-" * 62)
+for m in graus_ex4:
+    e_limpo = resultados_ex3['erros_L2'][m]
+    e_ruidoso = resultados_ex4['erros_L2_medio'][m]
+    print(f"{m:>8d}  {e_limpo:>22.6e}  {e_ruidoso:>26.6e}")
+
+# ---- Figura 1: trajetórias ruidosas + regressão de cada realização ----
+t_fino_ex4 = np.linspace(tempos_ex4[0], tempos_ex4[-1], 600)
+
+fig4, axes4 = plt.subplots(1, 2, figsize=(14, 5))
+
+# Painel esquerdo — sinal ruidoso vs. dado limpo + média
+ax_esq = axes4[0]
+for k, P_r in enumerate(resultados_ex4['P_realizacoes']):
+    ax_esq.plot(tempos_ex4, P_r, color='gray', linewidth=0.6, alpha=0.5,
+                label='Realização ruidosa' if k == 0 else None)
+ax_esq.plot(tempos_ex4, resultados_ex4['P_ruidoso_medio'],
+            color='darkorange', linewidth=2.0, label='Média das realizações')
+ax_esq.plot(t_dados, P_dados, 'k--', linewidth=1.5, label='Dados limpos (nominal)')
+ax_esq.set_title("Sinal de Potência com Ruído Estocástico", fontweight='bold')
+ax_esq.set_xlabel("Tempo adimensional ($t$)")
+ax_esq.set_ylabel("Potência Instantânea $\\mathcal{P}(t)$")
+ax_esq.legend(fontsize=9)
+ax_esq.grid(True, linestyle='--', alpha=0.5)
+
+# Painel direito — erro L2 médio (ruidoso) vs. grau, comparado ao limpo
+ax_dir = axes4[1]
+erros_limpos = [resultados_ex3['erros_L2'][m] for m in graus_ex4]
+erros_ruidosos_med = [resultados_ex4['erros_L2_medio'][m] for m in graus_ex4]
+ax_dir.semilogy(graus_ex4, erros_limpos, 's--', color='steelblue',
+                linewidth=2, markersize=6, label='Sem ruído')
+ax_dir.semilogy(graus_ex4, erros_ruidosos_med, 'o-', color='crimson',
+                linewidth=2, markersize=6, label='Com ruído (média)')
+ax_dir.set_title("Erro L2 vs. Grau: Sensibilidade ao Ruído", fontweight='bold')
+ax_dir.set_xlabel("Grau $m$")
+ax_dir.set_ylabel("Erro $e$ (Eq. 6.14) — escala log")
+ax_dir.set_xticks(graus_ex4)
+ax_dir.legend(fontsize=10)
+ax_dir.grid(True, linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+caminho_fig_ex4 = os.path.join(diretorio_atual, "ex4_sensibilidade_ruido.png")
+plt.savefig(caminho_fig_ex4, dpi=300)
+print(f"\n✓ Figura do Exercício 4 salva em: {caminho_fig_ex4}")
+plt.show()
 
 print("\n" + "=" * 80)
 print("EXERCÍCIO 4 (Seção 6.4.3) CONCLUÍDO.")

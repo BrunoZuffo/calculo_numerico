@@ -992,14 +992,145 @@ def Interpola_Potencia_Cubica(t_dados, P_dados):
 # Regressão Polinomial Global
 # ========================================================================
 
+
+
+# ========================================================================
+# # SEÇÃO 6.4.3 - EXERCÍCIO 3
+# SEÇÃO 6.4.3 - EXERCÍCIO 3
+# Regressão Polinomial Global
+# ========================================================================
+
 # parte da nat vai aqui
+def Regressao_Polinomial_Global(t_dados, P_dados, graus=None):
+    """
+    Exercício 3: Regressão Polinomial Global pelo Método dos Mínimos Quadrados.
+
+    Para cada grau m em `graus`, ajusta um polinômio global aos dados
+    (t_dados, P_dados) e calcula o erro L2 (Eq. 6.14):
+        e = sqrt( integral_{t0}^{tf} [p(t) - P(t)]^2 dt )
+    via regra do trapézio.
+
+    Retorna um dicionário com:
+        'graus'        : lista de graus testados
+        'coeficientes' : {m: coefs} — coeficientes do np.polyfit
+        'erros_L2'     : {m: e}     — erro L2 de cada grau
+    """
+    if graus is None:
+        graus = list(range(3, 16))
+
+    coeficientes = {}
+    erros_L2 = {}
+
+    for m in graus:
+        coefs = np.polyfit(t_dados, P_dados, m)
+        p_aprox = np.polyval(coefs, t_dados)
+        residuo_quad = (p_aprox - P_dados) ** 2
+        erro = np.sqrt(_integral_trapezoidal(residuo_quad,
+                                             x=t_dados))
+        coeficientes[m] = coefs
+        erros_L2[m] = erro
+
+    return {'graus': graus, 'coeficientes': coeficientes, 'erros_L2': erros_L2}
+
+
+def SimulaEnergiaDissipada_Ruidosa(GD, dt, t_max, p_inlet_dim, seed=None):
+    """
+    Exercício 4: variante ruidosa de SimulaEnergiaDissipada.
+
+    Em cada passo de tempo aplica uma perturbação uniforme U(-0.15, 0.15)
+    à pressão de entrada adimensional:
+        p_inlet(t) = (p_inlet_dim / p_ref) * [1 + U(-0.15, 0.15)]
+
+    Retorna (E, P_hist, tempos) — mesma assinatura que
+    SimulaEnergiaDissipada, porém com sinal de potência ruidoso.
+    """
+    rng = np.random.default_rng(seed)
+
+    nm = GD['nm']
+    np_net = GD['np_net']
+    n_inlet = GD['n_inlet']
+
+    Aglob, A_potencia, pref = MontaSistemaFalho(GD, GD['C'], dt)
+
+    p_inlet_adim_base = p_inlet_dim / pref
+
+    w_n = np.zeros(nm)
+    v_n = np.zeros(nm)
+
+    tempos = np.arange(0.0, t_max + 0.5 * dt, dt)
+    P_hist = np.empty(tempos.shape[0])
+
+    for i in range(tempos.shape[0]):
+        ruido = -0.15 + 0.3 * rng.random()
+        p_inlet_adim = p_inlet_adim_base * (1.0 + ruido)
+        w_n, v_n, p_n = Resolve_Passo_Tempo(
+            Aglob, GD['M_mem'], w_n, v_n, p_inlet_adim, dt, nm, np_net, n_inlet
+        )
+        P_hist[i] = p_n @ (A_potencia @ p_n)
+
+    E = _integral_trapezoidal(P_hist, dx=dt)
+    return E, P_hist, tempos
+
 
 # ========================================================================
 # SEÇÃO 6.4.3 - EXERCÍCIO 4
 # Análise de Sensibilidade a Ruídos Estocásticos
 # ========================================================================
 
-# parte da nat vai aqui
+
+def Analise_Ruido_Estocastico(GD, dt, t_max, p_inlet_dim,
+                               graus=None, N_realizacoes=10, seed=42):
+    """
+    Exercício 4: Análise de sensibilidade a ruídos estocásticos.
+
+    Gera N_realizacoes trajetórias ruidosas de P(t) e, para cada uma,
+    aplica a regressão polinomial global (Exercício 3) nos graus
+    especificados.
+
+    Retorna um dicionário com:
+        'tempos'          : vetor de tempo (igual para todas as realizações)
+        'P_ruidoso_medio' : média de P(t) sobre as N realizações
+        'P_realizacoes'   : lista com os N vetores P_hist ruidosos
+        'erros_L2_medio'  : {m: média do erro L2 sobre as N realizações}
+        'erros_L2_todas'  : {m: lista com N erros L2}
+        'graus'           : graus testados
+    """
+    if graus is None:
+        graus = list(range(3, 16))
+
+    rng_mestre = np.random.default_rng(seed)
+
+    P_realizacoes = []
+    tempos = None
+
+    for k in range(N_realizacoes):
+        s = int(rng_mestre.integers(0, 2**31))
+        _E, P_hist, t_vec = SimulaEnergiaDissipada_Ruidosa(
+            GD, dt, t_max, p_inlet_dim, seed=s
+        )
+        P_realizacoes.append(P_hist)
+        if tempos is None:
+            tempos = t_vec
+
+    P_stack = np.array(P_realizacoes)          # (N_realizacoes, n_steps)
+    P_ruidoso_medio = P_stack.mean(axis=0)
+
+    erros_L2_todas = {m: [] for m in graus}
+    for k in range(N_realizacoes):
+        res = Regressao_Polinomial_Global(tempos, P_realizacoes[k], graus=graus)
+        for m in graus:
+            erros_L2_todas[m].append(res['erros_L2'][m])
+
+    erros_L2_medio = {m: float(np.mean(erros_L2_todas[m])) for m in graus}
+
+    return {
+        'tempos': tempos,
+        'P_ruidoso_medio': P_ruidoso_medio,
+        'P_realizacoes': P_realizacoes,
+        'erros_L2_medio': erros_L2_medio,
+        'erros_L2_todas': erros_L2_todas,
+        'graus': graus,
+    }
 
 # ==============================================================================
 # SEÇÃO 6.4.5 Investigando o comportamento do sistema via diferenciação numérica
