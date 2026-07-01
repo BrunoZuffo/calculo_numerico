@@ -285,7 +285,7 @@ mascara_zoom = (t_fino >= t_zoom_ini) & (t_fino <= t_zoom_fim)
 P_zoom = np.concatenate([P_cubico[mascara_zoom], P_linear[mascara_zoom]])
 margem = 0.1 * (P_zoom.max() - P_zoom.min() + 1e-12)
 
-# Definindo os limites do zoom (até 1.75) e o eixo Y
+
 ax2.set_xlim(1.4, 1.6)
 ax2.set_ylim(0.0, 0.5)
 
