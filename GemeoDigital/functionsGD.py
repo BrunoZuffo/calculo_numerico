@@ -1649,7 +1649,39 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 #  Localização de Raízes via Newton-Raphson
 # ========================================================================
 
-# parte do antero vai aqui
+def Newton_Raphson_Energia(GD_params, H_chute, E_alvo=7.5, tol=1e-4, max_iter=10):
+    """
+    Resolve a equação não linear: f(H) = E(H) - E_alvo = 0
+    via Método de Newton-Raphson.
+    """
+    H = H_chute
+    eps = 1.0 # Passo para a derivada numérica (1 micrometro)
+    
+    print(f"\nIniciando Newton-Raphson para E = {E_alvo}...")
+    print(f"{'Iter':>5} | {'H [um]':>12} | {'f(H)':>12}")
+    print("-" * 35)
+
+    for i in range(max_iter):
+        # Avalia f(H) = E(H) - E_alvo
+        res_base = SimulaCaso645(GD_params, H_um=H)
+        f_H = res_base["E"] - E_alvo
+        
+        # Avalia f(H + eps) para derivada numérica
+        res_plus = SimulaCaso645(GD_params, H_um=H + eps)
+        f_H_plus = res_plus["E"] - E_alvo
+        
+        df_H = (f_H_plus - f_H) / eps # Diferença finita forward
+        
+        print(f"{i:5d} | {H:12.4f} | {f_H:12.4e}")
+        
+        if abs(f_H) < tol:
+            print("-" * 35)
+            print(f"Convergência atingida em {i} iterações.")
+            return H
+            
+        H = H - f_H / df_H
+        
+    return H
 
 # =======================================================================================
 # CONCLUSÃO
