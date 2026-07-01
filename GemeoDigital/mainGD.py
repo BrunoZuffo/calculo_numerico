@@ -380,7 +380,7 @@ GD = MontaGemeoDigital(params)
 #       print(" EXERCÍCIO 4 (6.4.3): Sensibilidade a Ruídos em p_inlet(t)")
 #       print("-" * 85)
 #       
-#       N_realizacoes_ex4 = 10   # número de trajetórias ruidosas
+#       N_realizacoes_ex4 = 100   # número de trajetórias ruidosas
 #       graus_ex4 = list(range(3, 16))
 #       
 #       print(f"-> Simulando {N_realizacoes_ex4} trajetórias com p_inlet ruidosa "
