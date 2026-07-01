@@ -1649,40 +1649,98 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 #  Localização de Raízes via Newton-Raphson
 # ========================================================================
 
-def Newton_Raphson_Energia(GD_params, H_chute, E_alvo=7.5, tol=1e-4, max_iter=10):
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Nota: Certifique-se de que a função SimulaCaso645 está importada ou definida neste arquivo
+# ou que o seu código original já esteja lidando com ela!
+
+def funcao_energia_H(GD_params, H_um, E_alvo=7.5):
     """
-    Resolve a equação não linear: f(H) = E(H) - E_alvo = 0
-    via Método de Newton-Raphson.
+    Calcula f(H) = E(H) - E_alvo.
     """
-    H = H_chute
-    eps = 1.0 # Passo para a derivada numérica (1 micrometro)
-    
-    print(f"\nIniciando Newton-Raphson para E = {E_alvo}...")
-    print(f"{'Iter':>5} | {'H [um]':>12} | {'f(H)':>12}")
-    print("-" * 35)
+    resultado = SimulaCaso645(GD_params, H_um=H_um)
+    return resultado["E"] - E_alvo
+
+def derivada_forward_energia(GD_params, H_um, E_alvo=7.5, eps=1.0):
+    """
+    Aproxima f'(H) por diferença finita progressiva.
+    """
+    f_H = funcao_energia_H(GD_params, H_um, E_alvo)
+    f_H_plus = funcao_energia_H(GD_params, H_um + eps, E_alvo)
+
+    return (f_H_plus - f_H) / eps
+
+def newton_raphson_energia(
+    GD_params,
+    H_chute,
+    E_alvo=7.5,
+    tol=1e-4,
+    max_iter=10,
+    eps=1.0,
+    H_min=500.0,
+    H_max=1500.0
+):
+    """
+    Resolve f(H) = E(H) - E_alvo = 0 pelo método de Newton-Raphson.
+    Retorna o H encontrado e o histórico das iterações.
+    """
+
+    H = float(H_chute)
+    historico = []
 
     for i in range(max_iter):
-        # Avalia f(H) = E(H) - E_alvo
-        res_base = SimulaCaso645(GD_params, H_um=H)
-        f_H = res_base["E"] - E_alvo
-        
-        # Avalia f(H + eps) para derivada numérica
-        res_plus = SimulaCaso645(GD_params, H_um=H + eps)
-        f_H_plus = res_plus["E"] - E_alvo
-        
-        df_H = (f_H_plus - f_H) / eps # Diferença finita forward
-        
-        print(f"{i:5d} | {H:12.4f} | {f_H:12.4e}")
-        
-        if abs(f_H) < tol:
-            print("-" * 35)
-            print(f"Convergência atingida em {i} iterações.")
-            return H
-            
-        H = H - f_H / df_H
-        
-    return H
+        f_H = funcao_energia_H(GD_params, H, E_alvo)
+        df_H = derivada_forward_energia(GD_params, H, E_alvo, eps)
 
+        historico.append({
+            "iter": i,
+            "H": H,
+            "f_H": f_H,
+            "df_H": df_H
+        })
+
+        if abs(f_H) < tol:
+            return H, historico
+
+        if abs(df_H) < 1e-12:
+            raise RuntimeError("Derivada muito próxima de zero. Newton-Raphson falhou.")
+
+        H_novo = H - f_H / df_H
+
+        # Evita sair do intervalo físico do problema
+        H_novo = max(H_min, min(H_max, H_novo))
+
+        H = H_novo
+
+    return H, historico
+
+def plotar_raiz_energia(GD_params, H_otimo, E_alvo=7.5):
+    """
+    Plota f(H) = E(H) - E_alvo no intervalo físico considerado.
+    """
+
+    Hs = np.linspace(500, 1500, 50)
+    fs = []
+
+    for H in Hs:
+        f_H = funcao_energia_H(GD_params, H, E_alvo)
+        fs.append(f_H)
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(Hs, fs, label="f(H) = E(H) - 7.5")
+    plt.axhline(0, linestyle="--", color="black")
+    plt.axvline(H_otimo, linestyle="--", label=f"H = {H_otimo:.2f} µm")
+    plt.scatter([H_otimo], [0], zorder=5)
+
+    plt.xlabel("H [µm]")
+    plt.ylabel("f(H)")
+    plt.title("Localização da raiz por Newton-Raphson")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+    plt.legend()
+    plt.savefig("grafico_raiz_newton.png")
 # =======================================================================================
 # CONCLUSÃO
 # =======================================================================================
