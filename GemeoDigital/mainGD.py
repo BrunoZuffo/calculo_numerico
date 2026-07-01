@@ -29,7 +29,9 @@ from GemeoDigital.functionsGD import (
     RodaExercicio1_FalhasHidraulicas, PlotaExercicio1_FalhasHidraulicas,
     RodaExercicio2_AnaliseDinamica, PlotaExercicio2_AnaliseDinamica,
     SimulaEnergiaDissipada, Interpola_Potencia_Linear, 
-    Interpola_Potencia_Cubica
+    Interpola_Potencia_Cubica,
+    RodaExercicio645_Sensibilidade,
+    PlotaExercicio645_Sensibilidade,
 )
 
 # ==============================================================================
@@ -312,6 +314,7 @@ print("\n" + "=" * 80)
 print("EXERCÍCIO 4 (Seção 6.4.3) CONCLUÍDO.")
 print("=" * 80)
 
+
 # ==============================================================================
 # SEÇÃO 6.4.5 Investigando o comportamento do sistema via diferenciação numérica
 # ==============================================================================
@@ -320,12 +323,38 @@ print("=" * 80)
 # SEÇÃO 6.4.5 - EXERCÍCIO 1
 # Análise Numérica de Sensibilidade
 # ========================================================================
-
 print("\n" + "-"*85)
 print(" EXERCÍCIO 1 (Seção 6.4.5): Análise Numérica de Sensibilidade")
 print("-" * 85)
 
-# parte do zuffo vai aqui
+resultados_ex645 = RodaExercicio645_Sensibilidade(
+    params,
+    t_max=4.0,
+    dt=0.05
+)
+
+PlotaExercicio645_Sensibilidade(
+    resultados_ex645,
+    save_dir=diretorio_atual
+)
+
+print("\nResumo numérico - Sensibilidade em relação a TC:")
+for i, TC in enumerate(resultados_ex645["TC"]["valores"]):
+    print(
+        f"  TC={TC:8.2f} °C | "
+        f"E={resultados_ex645['TC']['E'][i]:.6e} | "
+        f"qin(tf)={resultados_ex645['TC']['qin_tf'][i]:.6e} | "
+        f"V(tf)={resultados_ex645['TC']['V_tf'][i]:.6e}"
+    )
+
+print("\nResumo numérico - Sensibilidade em relação a H:")
+for i, H in enumerate(resultados_ex645["H"]["valores"]):
+    print(
+        f"  H={H:8.2f} µm | "
+        f"E={resultados_ex645['H']['E'][i]:.6e} | "
+        f"dE/dH centered={resultados_ex645['H']['dE_centered'][i]:.6e} | "
+        f"dE/dH direto={resultados_ex645['H']['dE_direct'][i]:.6e}"
+    )
 
 print("\n" + "=" * 80)
 print("EXERCÍCIO 1 (Seção 6.4.5) CONCLUÍDO.")
