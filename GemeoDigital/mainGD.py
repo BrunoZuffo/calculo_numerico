@@ -30,7 +30,7 @@ from GemeoDigital.functionsGD import (
     RodaExercicio2_AnaliseDinamica, PlotaExercicio2_AnaliseDinamica,
     SimulaEnergiaDissipada, Interpola_Potencia_Linear, 
     Interpola_Potencia_Cubica, RodaExercicio645_Sensibilidade,
-    PlotaExercicio645_Sensibilidade, Newton_Raphson_Energia, Regressao_Polinomial_Global,
+    PlotaExercicio645_Sensibilidade, newton_raphson_energia, Regressao_Polinomial_Global,
     Analise_Ruido_Estocastico, SimulaCaso645
 )
 
@@ -501,15 +501,43 @@ GD = MontaGemeoDigital(params)
 # Localização de Raízes via Newton-Raphson
 # ========================================================================
 
-print("\n" + "-"*85)
+# --- MANTENHA SUAS OUTRAS IMPORTAÇÕES E VARIÁVEIS AQUI (ex: params, etc) ---
+
+# Correção: O import agora chama os nomes exatos (com letras minúsculas)
+try:
+    from GemeoDigital.functionsGD import newton_raphson_energia, plotar_raiz_energia
+except ModuleNotFoundError:
+    # Caso você rode diretamente de dentro da pasta GemeoDigital
+    from functionsGD import newton_raphson_energia, plotar_raiz_energia
+
+
+print("\n" + "-" * 85)
 print(" EXERCÍCIO 2 (Seção 6.4.5): Localização de Raízes via Newton-Raphson")
 print("-" * 85)
 
-# Vamos buscar a largura H que resulta em uma energia adimensional de 7.5
-H_inicial = 800.0 # micrometros (chute inicial razoável baseado no domínio)
-H_otimo = Newton_Raphson_Energia(params, H_inicial, E_alvo=7.5)
+H_inicial = 800.0
+E_alvo = 7.5
 
-print(f"\nLargura geométrica ótima encontrada: H = {H_otimo:.4f} µm")
+H_otimo, historico = newton_raphson_energia(
+    params,  # Certifique-se de que a variável 'params' foi declarada acima!
+    H_chute=H_inicial,
+    E_alvo=E_alvo,
+    tol=1e-4,
+    max_iter=10,
+    eps=1.0
+)
+
+print(f"{'Iter':>5} | {'H [um]':>12} | {'f(H)':>12}")
+print("-" * 35)
+
+for item in historico:
+    print(f"{item['iter']:5d} | {item['H']:12.4f} | {item['f_H']:12.4e}")
+
+print("-" * 35)
+print(f"Largura geométrica ótima encontrada: H = {H_otimo:.4f} µm")
+
+# Opcional, mas recomendado para apresentação/relatório
+plotar_raiz_energia(params, H_otimo, E_alvo=E_alvo)
 
 print("\n" + "=" * 80)
 print("EXERCÍCIO 2 (Seção 6.4.5) CONCLUÍDO.")
