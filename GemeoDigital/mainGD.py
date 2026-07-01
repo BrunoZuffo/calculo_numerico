@@ -239,27 +239,45 @@ t_fino = np.linspace(t_dados[0], t_dados[-1], 500)
 P_linear = interpolador_linear(t_fino)
 P_cubico = interpolador_cubico(t_fino)
 
+
+# ========================================================================
 # 5. Renderização Gráfica Comparativa
-fig, ax = plt.subplots(figsize=(10, 6))
+# ========================================================================
+
+# ------------------------------------------
+# GRÁFICO 1: VISÃO GERAL (COMPLETO)
+# ------------------------------------------
+fig1, ax1 = plt.subplots(figsize=(10, 6))
 
 # Pontos reais observados (Nós da malha)
-ax.plot(t_dados, P_dados, 'o', color='black', markersize=4, label='Dados Discretos Observados ($\\delta t = 0.05$)')
+ax1.plot(t_dados, P_dados, 'o', color='black', markersize=4, label='Dados Discretos Observados ($\\delta t = 0.05$)')
 
 # Curvas de interpolação
-ax.plot(t_fino, P_linear, '--', color='dodgerblue', alpha=0.8, linewidth=1.5, label='Spline Linear (Ex 1)')
-ax.plot(t_fino, P_cubico, '-', color='crimson', alpha=0.8, linewidth=1.5, label='Spline Cúbico (Ex 2)')
+ax1.plot(t_fino, P_linear, '--', color='dodgerblue', alpha=0.8, linewidth=1.5, label='Spline Linear (Ex 1)')
+ax1.plot(t_fino, P_cubico, '-', color='crimson', alpha=0.8, linewidth=1.5, label='Spline Cúbico (Ex 2)')
 
 # Formatação visual
-ax.set_title("Aproximação de Dados da Potência: Splines Lineares vs Cúbicos", fontweight='bold')
-ax.set_xlabel("Tempo adimensional ($t$)")
-ax.set_ylabel("Potência Instantânea $\\mathcal{P}(t)$")
-ax.legend(fontsize=11)
-ax.grid(True, linestyle='--', alpha=0.6)
+ax1.set_title("Aproximação de Dados da Potência: Splines Lineares vs Cúbicos", fontweight='bold')
+ax1.set_xlabel("Tempo adimensional ($t$)")
+ax1.set_ylabel("Potência Instantânea $\\mathcal{P}(t)$")
+ax1.legend(fontsize=11)
+ax1.grid(True, linestyle='--', alpha=0.6)
 
-plt.tight_layout()
+fig1.tight_layout()
 caminho_salvar_interp = os.path.join(diretorio_atual, "interpolacao_potencia_ex1_ex2.png")
-plt.savefig(caminho_salvar_interp, dpi=300)
+fig1.savefig(caminho_salvar_interp, dpi=300)
 print(f"✓ Gráfico de interpolação salvo em: {caminho_salvar_interp}")
+
+
+# ------------------------------------------
+# GRÁFICO 2: ZOOM NAS INTERFACES
+# ------------------------------------------
+fig2, ax2 = plt.subplots(figsize=(10, 6))
+
+# Repetimos o plot na nova figura
+ax2.plot(t_dados, P_dados, 'o', color='black', markersize=4, label='Dados Discretos Observados ($\\delta t = 0.05$)')
+ax2.plot(t_fino, P_linear, '--', color='dodgerblue', alpha=0.8, linewidth=1.5, label='Spline Linear (Ex 1)')
+ax2.plot(t_fino, P_cubico, '-', color='crimson', alpha=0.8, linewidth=1.5, label='Spline Cúbico (Ex 2)')
 
 t_zoom_ini = t_dados[0] + 0.25 * (t_dados[-1] - t_dados[0])
 t_zoom_fim = t_dados[0] + 0.50 * (t_dados[-1] - t_dados[0])
@@ -267,13 +285,25 @@ mascara_zoom = (t_fino >= t_zoom_ini) & (t_fino <= t_zoom_fim)
 P_zoom = np.concatenate([P_cubico[mascara_zoom], P_linear[mascara_zoom]])
 margem = 0.1 * (P_zoom.max() - P_zoom.min() + 1e-12)
 
-ax.set_xlim(t_zoom_ini, t_zoom_fim)
-ax.set_ylim(P_zoom.min() - margem, P_zoom.max() + margem)
-ax.set_title(f"Zoom ({t_zoom_ini:.2f} a {t_zoom_fim:.2f}s) - Analisando Suavidade nas Interfaces",
-             fontweight='bold')
+# Definindo os limites do zoom (até 1.75) e o eixo Y
+ax2.set_xlim(1.4, 1.6)
+ax2.set_ylim(0.0, 0.5)
+
+
+
+
+# Formatação visual do zoom
+ax2.set_title(f"Zoom ({1.4} a {1.6}s) - Analisando Suavidade nas Interfaces", fontweight='bold')
+ax2.set_xlabel("Tempo adimensional ($t$)")
+ax2.set_ylabel("Potência Instantânea $\\mathcal{P}(t)$")
+ax2.legend(fontsize=11)
+ax2.grid(True, linestyle='--', alpha=0.6)
+
+fig2.tight_layout()
 caminho_salvar_zoom = os.path.join(diretorio_atual, "interpolacao_potencia_zoom.png")
-plt.savefig(caminho_salvar_zoom, dpi=300)
+fig2.savefig(caminho_salvar_zoom, dpi=300)
 print(f"✓ Gráfico com zoom salvo em: {caminho_salvar_zoom}")
+
 
 plt.show()
 
