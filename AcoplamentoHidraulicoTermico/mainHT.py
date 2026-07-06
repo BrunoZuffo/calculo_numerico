@@ -1,3 +1,9 @@
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import sparse
@@ -15,6 +21,19 @@ from functionsHT import (ObterCondutividadeFaces_ViaNos, CriarSistemaSolidoCondu
                          obter_limites_e_niveis_individuais, plotar_rede_sobre_ax)
 
 from RedeHidraulica.functions import SolveNetwork, calc_vazao, calc_potencia, GeraGrafo, Assembly as AssemblyHidraulico
+
+from pathlib import Path
+
+PASTA_ATUAL = Path(__file__).resolve().parent
+OUT_DIR = PASTA_ATUAL / "resultados"
+OUT_DIR.mkdir(exist_ok=True)
+
+def salvar_figura(fig, nome):
+    caminho_png = OUT_DIR / f"{nome}.png"
+    caminho_pdf = OUT_DIR / f"{nome}.pdf"
+    fig.savefig(caminho_png, dpi=300, bbox_inches="tight")
+    fig.savefig(caminho_pdf, bbox_inches="tight")
+    print(f"[SALVO] {caminho_png}")
 
 # -----------------------------------------------------------------------------
 # CÓDIGO BASE - define os parâmetros da placa e executa as funções base
@@ -359,18 +378,20 @@ for Nx, Ny in lista_malhas_termicas:
                     s = np.linspace(0.5 / nsub, 1 - 0.5 / nsub, nsub)
                     pts = p1 + np.outer(s, p2 - p1)
                     T_arestas[k] = np.mean(interpolador_T(pts))
-            # Guarda o estado da malha mais refinada para compor o gráfico final
-            if Nx == 241 and metodo == "trapezio" and nsub == 1000:
-                T_arestas_final_ex4 = T_arestas.copy()
-                interpolador_final_ex4 = interpolador_T
-                pressure_final_ex4 = pressure_T.copy() # ADICIONADO: Salva o vetor de pressões
-                T_matriz_final_ex4 = T_flat_ex4.reshape((Ny, Nx)).copy() # ADICIONADO: Salva a matriz 2D de temperatura
+
             # 2. Atualização das condutâncias hidráulicas baseadas em T_arestas
             C_T = atualiza_condutancias(conec_ex4, Xno_ex4, T_arestas, Area_canal_ex4)
             # 3. Solução do escoamento na rede hidráulica
             pressure_T = SolveNetwork(conec_ex4, C_T, ps=ps_hid_ex4, Qs=Qs_hid_ex4)
             # 4. Cálculo da Potência dissipada
             W_T = calc_potencia(conec_ex4, C_T, pressure_T)
+
+            if Nx == 241 and metodo == "trapezio" and nsub == 1000:
+                T_arestas_final_ex4 = T_arestas.copy()
+                interpolador_final_ex4 = interpolador_T
+                pressure_final_ex4 = pressure_T.copy()
+                T_matriz_final_ex4 = T_flat_ex4.reshape((Ny, Nx)).copy()
+
             resultados_ex4.append({
                 "malha_termica": f"{Nx}x{Ny}",
                 "metodo_quadratura": metodo,
@@ -390,6 +411,64 @@ if T_arestas_final_ex4 is None:
 # Geração das Tabelas ASCII Formatadas
 # ---------------------------------------------------------------------
 df_ex4 = pd.DataFrame(resultados_ex4)
+
+csv_ex4 = OUT_DIR / "resultados_exercicio4_cap4.csv"
+df_ex4.to_csv(csv_ex4, index=False)
+print(f"[SALVO] {csv_ex4}")
+
+#latex_ex4 = OUT_DIR / "tabela_resultados_ex4.tex"
+#df_ex4.to_latex(latex_ex4, index=False, float_format="%.6g")
+#print(f"[SALVO] {latex_ex4}")
+
+# ---------------------------------------------------------------------
+# GRÁFICO 1: PRESSÃO MÁXIMA
+# ---------------------------------------------------------------------
+fig_pressao, ax_pressao = plt.subplots(figsize=(8, 5))
+
+for (malha, metodo), grupo in df_ex4.groupby(["malha_termica", "metodo_quadratura"]):
+    grupo = grupo.sort_values("nsub")
+    ax_pressao.plot(
+        grupo["nsub"],
+        grupo["pressao_max"],
+        marker="o",
+        label=f"{malha} - {metodo}"
+    )
+
+ax_pressao.set_xscale("log")
+ax_pressao.set_xlabel("Número de subintervalos da quadratura")
+ax_pressao.set_ylabel("Pressão máxima da rede (Pa)")
+ax_pressao.set_title("Pressão máxima em função da quadratura térmica")
+ax_pressao.grid(True, which="both", linestyle="--", alpha=0.5)
+ax_pressao.legend(fontsize=8)
+
+salvar_figura(fig_pressao, "ex4_pressao_maxima")
+plt.close(fig_pressao)
+
+
+# ---------------------------------------------------------------------
+# GRÁFICO 2: POTÊNCIA TOTAL
+# ---------------------------------------------------------------------
+fig_potencia, ax_potencia = plt.subplots(figsize=(8, 5))
+
+for (malha, metodo), grupo in df_ex4.groupby(["malha_termica", "metodo_quadratura"]):
+    grupo = grupo.sort_values("nsub")
+    ax_potencia.plot(
+        grupo["nsub"],
+        grupo["potencia_total"],
+        marker="o",
+        label=f"{malha} - {metodo}"
+    )
+
+ax_potencia.set_xscale("log")
+ax_potencia.set_xlabel("Número de subintervalos da quadratura")
+ax_potencia.set_ylabel("Potência total dissipada (W)")
+ax_potencia.set_title("Potência total em função da quadratura térmica")
+ax_potencia.grid(True, which="both", linestyle="--", alpha=0.5)
+ax_potencia.legend(fontsize=8)
+
+salvar_figura(fig_potencia, "ex4_potencia_total")
+plt.close(fig_potencia)
+
 print("\n" + "="*85)
 print(" TABELA DE RESULTADOS FÍSICOS (TEMPERATURAS E PRESSÃO)")
 print("="*85)
@@ -433,9 +512,9 @@ sc = ax.scatter(
 )
 
 # Estilização Geométrica e Travamento de Escala
-ax.set_title("Contours of temperature", fontsize=12)
-ax.set_xlabel('x (m)', fontsize=10)
-ax.set_ylabel('y (m)', fontsize=10)
+ax.set_title("Campo térmico e pressão na rede hidráulica", fontsize=12)
+cbar_P.set_label('Pressão, p (Pa)', fontsize=10)
+cbar_T.set_label('Temperatura, T (°C)', fontsize=10)
 ax.set_xlim(0, Lx_ex4)
 ax.set_ylim(0, Ly_ex4)
 ax.set_aspect('equal')
@@ -455,7 +534,8 @@ cax_T = divider.append_axes("right", size="2.5%", pad=0.2)
 cbar_T = fig.colorbar(cont, cax=cax_T)
 cbar_T.set_label('Temperature, T', fontsize=10)
 
-plt.show()
+salvar_figura(fig, "ex4_campo_termico_pressao_rede")
+plt.close(fig)
 
 # -----------------------------------------------------------------------------
 # EXERCÍCIO 1, PARTE 1
