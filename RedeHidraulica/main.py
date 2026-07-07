@@ -1,14 +1,12 @@
-from RedeHidraulica.functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, CalculoCondutancia  
+from functions import (Assembly, GeraGrafo, PlotaRede, SolveNetwork, 
+                        CalculoCondutancia, createK, createD, calc_vazao, 
+                        calc_potencia, AssemblyVectorC)
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib
 matplotlib.use("TkAgg")
 import time
-
-from RedeHidraulica.functions import Assembly, GeraGrafo, PlotaRede, SolveNetwork, createK, createD, calc_vazao, calc_potencia, AssemblyVectorC
-import numpy as np
-import matplotlib.pyplot as plt
 
 # CONSTRUÇÃO DO MODELO FÍSICO
 
@@ -20,6 +18,17 @@ n_inlet = 0                 # nó mais a esquerda
 n_outlet = len(Xno) - 1     # nó mais a direita
 
 print(f"Rede gerada com {Xno.shape[0]} nós e {conec.shape[0]} canos.\n")
+
+# Teste do funcionamento da Rede Hidrúalica
+
+ps = {str(n_outlet): 0} # pressão atmosférica no último nó (outlet)
+Qs = {'1': 1.0e-6} # vazão de 1 mL/s no primeiro nó (inlet)
+
+pressure = SolveNetwork(conec, C, ps=ps, Qs=Qs)
+matriz_vazao = calc_vazao(conec, C, pressure)
+
+fig, ax = PlotaRede(conec, Xno, pressure, matriz_vazao, factor_units=mm_to_m)
+plt.show()
 
 # EXERCÍCIOS PARA INVESTIGAR O COMPORTAMENTO DO SISTEMA (SEÇÃO 1.4.3)
 
@@ -48,6 +57,9 @@ Qs_A = {
 
 pressure_A = SolveNetwork(conec, C, ps=ps_A, Qs=Qs_A)
 matriz_vazao_A = calc_vazao(conec, C, pressure_A)
+
+fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m)
+plt.show()
 
 # B: Item 3
 
@@ -85,7 +97,8 @@ p_base_vetor_sin = SolveNetwork(conec, C, ps=ps_base, Qs=Qs_unit_sin)
 Qs_unit_cos = {'176': 1.0}
 p_base_vetor_cos = SolveNetwork(conec, C, ps=ps_base, Qs=Qs_unit_cos)
 
-pressao_maxima_tempo = []
+pressao_maxima_ex4 = []
+pressao_maxima_ex5 = []
 
 for t in t_array:
     # Calcular vazões reais no instante t (em m³/s)
@@ -93,15 +106,19 @@ for t in t_array:
     Q_t_sin = (1.0 + 0.1 * np.sin(omega_sin * t)) * 1.0e-6
     Q_t_cos = (0.1 + 0.01 * np.cos(omega_cos * t)) * 1.0e-6
     
-    # Superposição vetorial dos campos de pressão
-    p_t = p_base_vetor_sin * Q_t_sin + p_base_vetor_cos * Q_t_cos
+    # EXERCÍCIO 4: Apenas injeção no nó 0
+    p_t_ex4 = p_base_vetor_sin * Q_t_sin
+    pressao_maxima_ex4.append(np.max(p_t_ex4))
     
-    # Extração do máximo global no instante t
-    pressao_maxima_tempo.append(np.max(p_t))
+    # EXERCÍCIO 5: Superposição vetorial dos campos de pressão (nós 0 e 175)
+    p_t_ex5 = p_base_vetor_sin * Q_t_sin + p_base_vetor_cos * Q_t_cos
+    pressao_maxima_ex5.append(np.max(p_t_ex5))
 
+# Plotando os resultados comparativos
 plt.figure(figsize=(10, 6))
-plt.plot(t_array, pressao_maxima_tempo, color='purple', linewidth=2, label='Pressão Máxima Resultante')
-plt.title("Pressão Máxima na Rede (Itens 4 e 5 - Superposição)")
+plt.plot(t_array, pressao_maxima_ex4, color='blue', linestyle='--', linewidth=2, label='Ex 4 (Apenas Nó 0)')
+plt.plot(t_array, pressao_maxima_ex5, color='purple', linewidth=2, label='Ex 5 (Nós 0 e 175)')
+plt.title("Pressão Máxima na Rede")
 plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle=':', alpha=0.7)
@@ -133,7 +150,7 @@ for t in t_array:
 
 plt.figure(figsize=(10, 5))
 plt.plot(t_array, max_pressure, color='red', linewidth=2)
-plt.title("Efeito do Aquecimento na Pressão Máxima (Item 6 - Otimizado)")
+plt.title("Efeito do Aquecimento na Pressão Máxima")
 plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle='--', alpha=0.7)
@@ -195,6 +212,6 @@ for level in [1,2,3,4]:
 #Rede Hidráulica
 
 #CORRIGIR ERRO
-fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m, save_path='fig_rede_hidraulica.png')
+# fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m)
 
 plt.show()
