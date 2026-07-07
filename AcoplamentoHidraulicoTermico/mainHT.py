@@ -29,11 +29,30 @@ OUT_DIR = PASTA_ATUAL / "resultados"
 OUT_DIR.mkdir(exist_ok=True)
 
 def salvar_figura(fig, nome):
-    caminho_png = OUT_DIR / f"{nome}.png"
-    caminho_pdf = OUT_DIR / f"{nome}.pdf"
-    fig.savefig(caminho_png, dpi=300, bbox_inches="tight")
-    fig.savefig(caminho_pdf, bbox_inches="tight")
+    nome_seguro = "".join(
+        c if c.isalnum() or c in "-_." else "_"
+        for c in nome
+    )
+
+    caminho_png = OUT_DIR / f"{nome_seguro}.png"
+    caminho_pdf = OUT_DIR / f"{nome_seguro}.pdf"
+
+    # Remove arquivos antigos, se não estiverem travados
+    for caminho in [caminho_png, caminho_pdf]:
+        if caminho.exists():
+            try:
+                caminho.unlink()
+            except PermissionError:
+                print(f"[AVISO] Arquivo aberto/travado: {caminho}")
+                caminho_png = OUT_DIR / f"{nome_seguro}_novo.png"
+                caminho_pdf = OUT_DIR / f"{nome_seguro}_novo.pdf"
+                break
+
+    fig.savefig(str(caminho_png), dpi=300, bbox_inches="tight")
+    fig.savefig(str(caminho_pdf), bbox_inches="tight")
+
     print(f"[SALVO] {caminho_png}")
+    print(f"[SALVO] {caminho_pdf}")
 
 # -----------------------------------------------------------------------------
 # CÓDIGO BASE - define os parâmetros da placa e executa as funções base
@@ -315,15 +334,56 @@ print(f"Pressão Máxima (Acoplada Corrigida):  {P_max_mod:.2f} Pa")
 print(f"Variação da Perda de Carga Realizada: {((P_max_mod - P_max_iso)/P_max_iso)*100:.2f}%")
 print("-" * 80)
 
-# Renderização dos perfis de controle térmico do fluido
-plot_arestas_cromaticas_hidraulics(
-    conec,
-    Xno,
-    T_arestas_final,
-    titulo="Distribuição Térmica Integrada nas Arestas da Rede (N=1000)"
+from matplotlib.collections import LineCollection
+
+# ---------------------------------------------------------------------
+# EXERCÍCIO 3 - DISTRIBUIÇÃO TÉRMICA NAS ARESTAS DA REDE
+# ---------------------------------------------------------------------
+fig_ex3, ax_ex3 = plt.subplots(figsize=(10, 5))
+
+segmentos = []
+temperaturas_segmentos = []
+
+for k in range(len(conec)):
+    n1 = int(conec[k, 0])
+    n2 = int(conec[k, 1])
+
+    p1 = Xno[n1]
+    p2 = Xno[n2]
+
+    segmentos.append([p1, p2])
+    temperaturas_segmentos.append(T_arestas_final[k])
+
+lc = LineCollection(
+    segmentos,
+    array=np.array(temperaturas_segmentos),
+    cmap="jet",
+    linewidths=2.0
 )
 
-fig_ex3 = plt.gcf()
+ax_ex3.add_collection(lc)
+
+# Nós da rede
+ax_ex3.scatter(
+    Xno[:, 0],
+    Xno[:, 1],
+    c="black",
+    s=12,
+    zorder=3
+)
+
+cbar = fig_ex3.colorbar(lc, ax=ax_ex3)
+cbar.set_label("Temperatura média na aresta (°C)")
+
+ax_ex3.set_title("Distribuição térmica integrada nas arestas da rede (N = 1000)")
+ax_ex3.set_xlabel("x (m)")
+ax_ex3.set_ylabel("y (m)")
+ax_ex3.set_aspect("equal")
+ax_ex3.grid(True, linestyle="--", alpha=0.3)
+
+ax_ex3.autoscale()
+plt.tight_layout()
+
 salvar_figura(fig_ex3, "ex3_distribuicao_termica_arestas")
 plt.close(fig_ex3)
 
