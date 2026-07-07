@@ -172,6 +172,10 @@ cbarA_cont.set_label('Temperatura (°C)', fontsize=11)
 cbarA_graf = figA_graf.colorbar(sc, ax=axesA_graf.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
 cbarA_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
 
+salvar_figura(figA_cont, "ex2_casoA_contornos_interpolacao")
+salvar_figura(figA_graf, "ex2_casoA_temperaturas_nos_hidraulicos")
+plt.close(figA_cont)
+plt.close(figA_graf)
 plt.show()
 
 # ---------------------------------------------------
@@ -228,7 +232,10 @@ cbarB_cont.set_label('Temperatura (°C)', fontsize=11)
 cbarB_graf = figB_graf.colorbar(sc61, ax=axesB_graf.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
 cbarB_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
 
-plt.show()
+salvar_figura(figB_cont, "ex2_casoB_contornos_interpolacao")
+salvar_figura(figB_graf, "ex2_casoB_temperaturas_nos_hidraulicos")
+plt.close(figB_cont)
+plt.close(figB_graf)
 
 # -----------------------------------------------------------------------------
 # EXERCÍCIO 3, PARTE 1
@@ -309,7 +316,16 @@ print(f"Variação da Perda de Carga Realizada: {((P_max_mod - P_max_iso)/P_max_
 print("-" * 80)
 
 # Renderização dos perfis de controle térmico do fluido
-plot_arestas_cromaticas_hidraulics(conec, Xno, T_arestas_final, titulo="Distribuição Térmica Integrada nas Arestas da Rede (N=1000)")
+plot_arestas_cromaticas_hidraulics(
+    conec,
+    Xno,
+    T_arestas_final,
+    titulo="Distribuição Térmica Integrada nas Arestas da Rede (N=1000)"
+)
+
+fig_ex3 = plt.gcf()
+salvar_figura(fig_ex3, "ex3_distribuicao_termica_arestas")
+plt.close(fig_ex3)
 
 # -----------------------------------------------------------------------------
 # EXERCÍCIO 4, PARTE 1
@@ -512,9 +528,9 @@ sc = ax.scatter(
 )
 
 # Estilização Geométrica e Travamento de Escala
-ax.set_title("Campo térmico e pressão na rede hidráulica", fontsize=12)
-cbar_P.set_label('Pressão, p (Pa)', fontsize=10)
-cbar_T.set_label('Temperatura, T (°C)', fontsize=10)
+ax.set_title("Contours of temperature", fontsize=12)
+ax.set_xlabel('x (m)', fontsize=10)
+ax.set_ylabel('y (m)', fontsize=10)
 ax.set_xlim(0, Lx_ex4)
 ax.set_ylim(0, Ly_ex4)
 ax.set_aspect('equal')
@@ -655,7 +671,10 @@ for Nx, Ny in lista_malhas_ex5:
         ax2d.set_ylabel('Posição Y (m)')
         ax2d.set_aspect('equal')
         plt.tight_layout()
-        plt.show()
+
+        nome_fig = f"ex5_mapa_2d_malha_{Nx}x{Ny}_dmax_{str(d_max).replace('.', 'p')}"
+        salvar_figura(fig2d, nome_fig)
+        plt.close(fig2d)
     # -----------------------------------------------------------------
     # 5. PLOT DOS PERFIS UNIDIMENSIONAIS COMBINADOS (Por nível de malha)
     # -----------------------------------------------------------------
@@ -679,7 +698,10 @@ for Nx, Ny in lista_malhas_ex5:
     ax_perf[1].legend()
     
     plt.tight_layout()
-    plt.show()
+
+    nome_fig = f"ex5_perfis_malha_{Nx}x{Ny}"
+    salvar_figura(fig_perf, nome_fig)
+    plt.close(fig_perf)
 # =========================================================================
 # RELATÓRIO DE DESEMPENHO E ANÁLISE PARAMÉTRICA VIA TERMINAL
 # =========================================================================
@@ -820,7 +842,8 @@ for i, item in enumerate(resultados_ex2):
     ax.set_xlim(0.0, Lx_cap4)
     ax.set_ylim(0.0, Ly_cap4)
 
-plt.show()
+salvar_figura(fig, "ex2_fonte_mapas_temperatura_homogenea")
+plt.close(fig)
 
 
 # ==============================================================================
@@ -850,7 +873,8 @@ for i, item in enumerate(resultados_ex2):
     ax.set_xlim(0.0, Lx_cap4)
     ax.set_ylim(0.0, Ly_cap4)
 
-plt.show()
+salvar_figura(fig, "ex2_fonte_mapas_temperatura_heterogenea")
+plt.close(fig)
 
 
 # ==============================================================================
@@ -898,7 +922,8 @@ axes[1].set_ylabel("Temperatura (°C)")
 axes[1].grid(True, linestyle='--', alpha=0.5)
 axes[1].legend(fontsize=8, loc='best')
 
-plt.show()
+salvar_figura(fig, "ex2_fonte_perfis_temperatura_homogenea")
+plt.close(fig)
 
 
 # ==============================================================================
@@ -929,3 +954,6 @@ axes[1].set_xlabel("y (cm)")
 axes[1].set_ylabel("Temperatura (°C)")
 axes[1].grid(True, linestyle='--', alpha=0.5)
 axes[1].legend(fontsize=8, loc='best')
+
+salvar_figura(fig, "ex2_fonte_perfis_temperatura_homogenea")
+plt.close(fig)
