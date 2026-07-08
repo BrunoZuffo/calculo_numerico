@@ -1289,8 +1289,6 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Nota: Certifique-se de que a função SimulaCaso645 está importada ou definida neste arquivo
-# ou que o seu código original já esteja lidando com ela!
 
 def funcao_energia_H(GD_params, H_um, E_alvo=7.5):
     """Retorna f(H) = E(H) - E_alvo."""
