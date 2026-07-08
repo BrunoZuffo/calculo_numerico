@@ -31,4 +31,4 @@ As pastas também possuem outros arquivos extras além do código, como as apres
 
 ## Relatório
 
-O relatório final, com a fundamentação teórica e a análise de todos os resultados, está disponível em [LINK DO RELATÓRIO].
+O relatório final, com a fundamentação teórica e a análise de todos os resultados, está disponível no arquivo `RelatorioGrupo1.pdf`.
