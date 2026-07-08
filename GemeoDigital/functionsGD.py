@@ -32,20 +32,9 @@ _integral_trapezoidal = getattr(np, "trapezoid", None) or np.trapz
 # ========================================================================
 def ConstroiPlacaTermica(Xno, conec, Lx, Ly, Nx, Ny, k0, fonte_calor,
                           TL, TR, R_incl, xincl, yincl, TC, d_max):
-    """
-    Monta e resolve o campo de temperatura na placa solida, considerando
-    a condutividade termica efetiva modificada pela proximidade dos
-    microcanais da rede hidraulica (Equacao 4.3 do PDF).
+    """Monta e resolve a placa termica acoplada a rede hidraulica.
 
-    Condicoes de contorno (Secao 6.2):
-        TL = 10 C (lado esquerdo), TR = 30 C (lado direito)
-        TB = TT = 10 + 20*(x/Lx)   (base e topo)
-        Regiao circular de raio R_incl, centrada em (xincl, yincl),
-        com temperatura fixada em TC.
-
-    Retorna o campo de temperatura achatado (T_solid_flat, ordenado por
-    Ic = i + j*Nx) e as matrizes de condutividade efetiva nas faces
-    leste (k_e) e norte (k_n).
+    Retorna T_solid_flat, k_e e k_n.
     """
     x_coords = np.linspace(0.0, Lx, Nx)
 
@@ -72,14 +61,9 @@ def ConstroiPlacaTermica(Xno, conec, Lx, Ly, Nx, Ny, k0, fonte_calor,
 # ========================================================================
 def AtualizaRedeViaTemperatura(conec, Xno, T_solid_flat, Nx, Ny, Lx, Ly, H_k,
                                 num_subintervalos=100):
-    """
-    A partir do campo de temperatura da placa, calcula:
-        (a) a temperatura media de cada canal, via integral de linha
-            do campo interpolado ao longo de cada aresta da rede;
-        (b) a viscosidade dinamica local do fluido, segundo a relacao
-            empirica mu(T) da Secao 6.2;
-        (c) a condutancia hidraulica atualizada de cada canal, para
-            secao transversal quadrada de lado H_k (area = H_k**2).
+    """Atualiza as condutancias da rede a partir do campo termico.
+
+    Retorna C, temperatura media nas arestas e viscosidade local.
     """
     Area_canal = H_k ** 2
 
@@ -99,10 +83,9 @@ def AtualizaRedeViaTemperatura(conec, Xno, T_solid_flat, Nx, Ny, Lx, Ly, H_k,
 # 3. SUBSISTEMA 3 - MEMBRANA ELASTICA
 # ========================================================================
 def ConstroiMembrana(Nx_m, Ny_m, Lx_ad, sigma_ad, rho_ad, e_ad):
-    """
-    Monta as matrizes de rigidez (K) e massa (M) da membrana elastica
-    circular adimensionalizada, sobre uma malha Nx_m x Ny_m no dominio
-    quadrado [0, Lx_ad] x [0, Ly_ad] (Capitulo 3).
+    """Monta as matrizes de rigidez e massa da membrana elastica.
+
+    Retorna K_mem, M_mem e o passo espacial h_ad.
     """
     h_ad = Lx_ad / (Nx_m - 1)
     K_mem, M_mem = BuildMatrizes_Eigen_Circular(Nx_m, Ny_m, sigma_ad, rho_ad, e_ad, h_ad)
@@ -114,19 +97,9 @@ def ConstroiMembrana(Nx_m, Ny_m, Lx_ad, sigma_ad, rho_ad, e_ad):
 # ========================================================================
 
 def MontaGemeoDigital(params):
-    """
-    Executa o pipeline completo de montagem do Gemeo Digital (GD),
-    obedecendo a dependencia sequencial estabelecida na Secao 6.1:
+    """Monta o Gêmeo Digital a partir do dicionario de parametros.
 
-        Placa Termica -> Viscosidade/Condutancia dos Canais ->
-        Rede Hidraulica -> Acoplamento Monolitico com a Membrana
-
-    `params` e um dicionario com todos os parametros fisicos e
-    numericos nominais (ver mainGD.py, Secao 1).
-
-    Retorna um dicionario `GD` contendo todos os objetos montados,
-    pronto para ser reaproveitado nos exercicios de investigacao das
-    Secoes 6.3 e 6.4.
+    Retorna um dicionario GD com todos os objetos montados.
     """
     # ---- 1. Topologia da rede hidraulica -------------------------------
     Xno, conec = GeraGrafo(levels=params['complex_level'])
@@ -190,15 +163,9 @@ def MontaGemeoDigital(params):
 # ========================================================================
 
 def RodaSimulacaoBase(GD, t_max, p_inlet_dim):
-    """
-    Executa um laco temporal (Euler implicito) usando a matriz global
-    do Gemeo Digital, com pressao de entrada constante `p_inlet_dim`
-    [Pa], a fim de verificar a consistencia da base montada antes de
-    iniciar os exercicios das Secoes 6.3 e 6.4.
+    """Executa a simulacao transiente de verificacao da base.
 
-    Retorna um dicionario `historico` com as series temporais de
-    pressao no Outlet, vazao adimensional no Outlet, deslocamento no
-    centro da membrana, alem dos campos finais (w, v) de toda a malha.
+    Retorna historicos temporais e os estados finais do sistema.
     """
     params = GD['params']
     dt = params['dt']
@@ -247,14 +214,9 @@ def RodaSimulacaoBase(GD, t_max, p_inlet_dim):
 # ========================================================================
 
 def PlotaEstadoBaseGD(GD, historico, save_path=None):
-    """
-    Gera um painel de diagnostico com tres paineis:
-        (a) Mapa de temperatura na placa termica com a rede sobreposta;
-        (b) Historico temporal de pressao e vazao no Outlet;
-        (c) Forma final (deslocamento) da membrana elastica.
+    """Plota um diagnostico da base montada.
 
-    Util apenas para validar visualmente a base montada antes de
-    seguir para os exercicios das Secoes 6.3 e 6.4.
+    Mostra a placa termica, os historicos e a membrana final.
     """
     params = GD['params']
     Nx_t, Ny_t = params['Nx_t'], params['Ny_t']
@@ -325,31 +287,7 @@ def PlotaEstadoBaseGD(GD, historico, save_path=None):
 # ========================================================================
 
 def RandomFail(C_original, pO, fObs, rng):
-    """
-    Gera, de forma estocastica, uma instancia da rede com microcanais
-    obstruidos.
-
-    Cada canal possui probabilidade independente `pO` de estar
-    obstruido. Quando um canal e obstruido, sua condutancia hidraulica
-    nominal C_k e reduzida por um fator de severidade `fObs`, de modo
-    que C_k <- C_k / fObs (conforme descrito na Secao 6.3 do PDF).
-
-    Parameters
-    ----------
-    C_original : np.ndarray
-        Vetor de condutancias nominais (sem falhas) de cada canal.
-    pO : float
-        Probabilidade individual de obstrucao de cada canal (0 a 1).
-    fObs : float
-        Fator de severidade da obstrucao (C_k e dividido por fObs).
-    rng : np.random.Generator
-        Gerador de numeros aleatorios (np.random.default_rng(...)).
-
-    Returns
-    -------
-    C_modificado : np.ndarray
-        Vetor de condutancias da realizacao estocastica gerada.
-    """
+    """Gera uma realizacao estocastica da rede com obstrucoes."""
     C_modificado = C_original.copy()
     obstruido = rng.random(C_original.shape[0]) < pO
     C_modificado[obstruido] = C_modificado[obstruido] / fObs
@@ -357,15 +295,9 @@ def RandomFail(C_original, pO, fObs, rng):
 
 
 def ResolveRedeIsolada(conec, C, n_inlet, n_outlet, p_inlet, p_outlet):
-    """
-    Resolve o subsistema isolado (Rede Hidraulica + Placa Termica, ja
-    embutida nas condutancias C) em regime permanente, com pressao
-    prescrita em ambas as extremidades (Inlet e Outlet).
+    """Resolve a rede isolada com pressao prescrita no inlet e outlet.
 
-    A vazao total de entrada e calculada por "reacao", a partir da
-    matriz de condutancia NAO restrita A (Equacao da Secao 6.3):
-
-        q_inlet = sum_j A[n_inlet, j] * p_j   =>   qin = A[n_inlet,:] @ p
+    Retorna a vazao de entrada e o campo de pressao.
     """
     A = Assembly(conec, C)
     n = A.shape[0]
@@ -388,17 +320,7 @@ def ResolveRedeIsolada(conec, C, n_inlet, n_outlet, p_inlet, p_outlet):
 def MonteCarloFalhaHidraulica(conec, C_nominal, n_inlet, n_outlet, p_inlet,
                                p_outlet, q_critico, pO, fObs, N, rng,
                                retornar_evolucao=False):
-    """
-    Executa N realizacoes de Monte Carlo do cenario de obstrucao
-    estocastica dos microcanais (RandomFail), avaliando, em cada
-    realizacao, se a vazao de entrada resultante fica abaixo do limite
-    critico `q_critico`.
-
-    Se `retornar_evolucao=True`, retorna o vetor da estimativa
-    progressiva de Prob em funcao do numero de realizacoes (util para
-    a analise de convergencia). Caso contrario, retorna apenas o valor
-    final (escalar) da probabilidade estimada apos as N realizacoes.
-    """
+    """Executa Monte Carlo para falhas hidraulicas e estima Prob(q_inlet < q_critico)."""
     eventos = np.empty(N, dtype=bool)
     for i in range(N):
         C_real = RandomFail(C_nominal, pO, fObs, rng)
@@ -411,67 +333,7 @@ def MonteCarloFalhaHidraulica(conec, C_nominal, n_inlet, n_outlet, p_inlet,
 
 
 def DeterminaTamanhoAmostralEstabilizacao(evolucao, margem_alvo=0.01, z_score=1.959964):
-    """
-    Define o tamanho amostral minimo N_min a partir do qual a estimativa
-    progressiva de Monte Carlo `evolucao` (vetor Prob(N), N = 1, 2, ...)
-    pode ser considerada estatisticamente estabilizada.
-
-    CRITERIO TEORICO (Wald, aproximacao normal para uma proporcao): a
-    estimativa Prob(N) e uma proporcao amostral (fracao de "sucessos"
-    entre N realizacoes de Bernoulli), cujo erro padrao classico e
-
-        SE(N) = sqrt( Phat * (1 - Phat) / N ),  Phat = evolucao[-1]
-
-    com meia-largura do IC 95% dada por margem(N) = z_score * SE(N).
-    N_min e o MENOR N a partir do qual margem(N) permanece, ate o final
-    da amostragem, abaixo de `margem_alvo`.
-
-    NOTA IMPORTANTE sobre o que esse criterio significa (e o que NAO
-    significa): N_min e uma propriedade TEORICA de N e do valor final
-    Phat - nao da trajetoria especifica realizada. Isso o torna
-    deterministico e reprodutivel (nao depende da sorte da semente
-    aleatoria), e e o que reproduz a ordem de grandeza de "algumas
-    milhares de realizacoes" mencionada no PDF. Em contrapartida, ele
-    NAO garante que a curva real, apos N_min, nunca mais oscile para
-    fora da banda de confianca - isso e, alias, esperado: por
-    definicao, um IC de 95% implica que, em ~5% dos pontos, a
-    trajetoria realizada pode estar fora da banda mesmo apos a
-    "estabilizacao" teorica. (Uma alternativa seria um criterio
-    EMPIRICO, baseado em quando a trajetoria realizada de fato para de
-    se afastar do valor final - mas esse criterio e estatisticamente
-    fragil: depende de uma unica realizacao de Monte Carlo e pode
-    variar muito de uma semente para outra, inclusive subestimando
-    N_min por "sorte" da trajetoria, como observado para f_obs=10.)
-
-    Parameters
-    ----------
-    evolucao : np.ndarray
-        Estimativa progressiva de Prob, indices 0..N_total-1
-        correspondendo a N = 1..N_total realizacoes.
-    margem_alvo : float
-        Meia-largura alvo do intervalo de confianca, em probabilidade
-        (nao em %). Default: 0.01 (1 ponto percentual) - e o valor que
-        reproduz a ordem de grandeza esperada pelo PDF. Requer
-        N_convergencia grande o suficiente para que a margem de 1 p.p.
-        seja de fato atingida dentro da amostra simulada (caso
-        contrario, N_min fica preso no limite superior da amostra).
-    z_score : float
-        Quantil normal associado ao nivel de confianca desejado.
-        Default: 1.959964 (95% de confianca).
-
-    Returns
-    -------
-    N_min : int
-        Tamanho amostral minimo para estabilizacao, segundo o criterio
-        teorico acima.
-    margem_final : float
-        Margem teorica do IC 95% em N_min (deve ser <= margem_alvo, e
-        permanece abaixo disso ate o final da amostragem).
-    margem_vs_N : np.ndarray
-        Vetor completo margem(N) para N = 1..N_total, usado tambem para
-        plotar a banda de confianca (funil) em torno do valor
-        convergido.
-    """
+    """Determina o menor N em que a margem teorica fica abaixo do alvo."""
     N_total = len(evolucao)
     Ns = np.arange(1, N_total + 1)
     phat_final = evolucao[-1]
@@ -492,35 +354,14 @@ def DeterminaTamanhoAmostralEstabilizacao(evolucao, margem_alvo=0.01, z_score=1.
 
 
 def RodaExercicio1_FalhasHidraulicas(GD, q_critico=1.25e-5,
-                                      N_convergencia=5000,
+                                      N_convergencia=8000,
                                       pO_convergencia=0.6,
                                       fObs_lista=(5, 10),
                                       pO_grid=None,
                                       N_final=3000,
                                       p_outlet=0.0,
                                       semente=42):
-    """
-    Resolve o Exercicio 1 da Secao 6.3.2 do PDF (Analise Estacionaria
-    de Falhas Hidraulicas):
-
-        (a) Implementa RandomFail() para gerar obstrucoes estocasticas
-            das condutancias dos canais;
-        (b) Estuda a convergencia da estimativa de Monte Carlo Prob(N)
-            para um cenario de obstrucao representativo
-            (p_O = `pO_convergencia`), permitindo definir um tamanho
-            amostral N minimo para a estabilizacao estatistica;
-        (c) Varre o dominio p_O em [0.05, 0.65] e calcula os valores
-            CONVERGIDOS de Prob (usando N = `N_final` amostras por
-            ponto), contrastando dois fatores de severidade de
-            obstrucao distintos: f_obs = 5 e f_obs = 10.
-
-    A rede e a placa termica utilizadas sao exatamente as do Gemeo
-    Digital nominal montado em `GD` (MontaGemeoDigital): as
-    condutancias `GD['C']` ja incorporam o efeito da temperatura local
-    de cada canal (subsistema isolado Rede + Placa Termica).
-
-    Retorna um dicionario com todos os resultados numericos gerados.
-    """
+    """Executa a analise de falhas hidraulicas do Exercício 1."""
     if pO_grid is None:
         pO_grid = np.arange(0.05, 0.65 + 1e-9, 0.05)
 
@@ -531,10 +372,6 @@ def RodaExercicio1_FalhasHidraulicas(GD, q_critico=1.25e-5,
     p_inlet = GD['params']['p_inlet_dim']   # 5000 Pa nominal (Secao 6.2)
 
     # ---- (0) Diagnostico de calibracao: vazao NOMINAL (sem falhas) ----
-    # Compara a vazao de entrada do sistema isolado, sem nenhuma
-    # obstrucao, com o limite critico (usado apenas internamente, para
-    # compor `resultados['razao_nominal']`; impressao no terminal
-    # removida a pedido).
     q_nominal, _ = ResolveRedeIsolada(conec, C_nominal, n_inlet, n_outlet,
                                        p_inlet, p_outlet)
     razao_nominal = q_nominal / q_critico
@@ -618,16 +455,7 @@ def RodaExercicio1_FalhasHidraulicas(GD, q_critico=1.25e-5,
 def PlotaExercicio1_FalhasHidraulicas(resultados,
                                        save_path_convergencia=None,
                                        save_path_varredura=None):
-    """
-    Gera os dois graficos pedidos no Exercicio 1 da Secao 6.3.2:
-
-        (1) Evolucao da estimativa de Prob em funcao do numero
-            progressivo de realizacoes de Monte Carlo, permitindo
-            avaliar o comportamento assintotico/estabilizacao;
-        (2) Valores CONVERGIDOS de Prob em funcao da probabilidade de
-            obstrucao individual p_O, contrastando f_obs = 5 e
-            f_obs = 10.
-    """
+    """Plota a convergencia de Prob e a varredura em p_O."""
     # --- Grafico 1: convergencia da estimativa Prob(N) -----------------
     fig1, ax1 = plt.subplots(figsize=(9, 5.5))
     N_conv = resultados['N_convergencia']
@@ -642,12 +470,6 @@ def PlotaExercicio1_FalhasHidraulicas(resultados,
         valor_final = evol[-1]
 
         # --- Banda de confianca em "funil" (IC 95%, estreita com N) --------
-        # IMPORTANTE: a banda e centrada no VALOR FINAL CONVERGIDO (constante),
-        # nao na curva ruidosa `evol`. Centralizar em `evol` faz a banda
-        # "tremer" junto com as flutuacoes da trajetoria de Monte Carlo,
-        # destruindo o formato de funil liso esperado teoricamente
-        # (a banda deve refletir apenas a evolucao assintotica de 1/sqrt(N)
-        # em torno do valor para o qual o estimador converge).
         if fObs in margem_vs_N_dict:
             limite_inf = np.clip(valor_final - margem_vs_N_dict[fObs], 0.0, 1.0)
             limite_sup = np.clip(valor_final + margem_vs_N_dict[fObs], 0.0, 1.0)
@@ -716,24 +538,7 @@ def PlotaExercicio1_FalhasHidraulicas(resultados,
 # ==============================================================================
 
 def MontaSistemaFalho(GD, C_real, dt):
-    """
-    Reconstroi, para uma instancia de rede COM FALHAS (vetor de
-    condutancias `C_real`, ja gerado por RandomFail) e um passo de
-    tempo `dt`, a matriz global acoplada Aglob (necessaria para marchar
-    no tempo via Resolve_Passo_Tempo) E a matriz de condutancia
-    hidraulica "fisica" 𝔸 = D^T K D, adimensionalizada e SEM a
-    substituicao da linha do Inlet, usada na forma quadratica da
-    potencia instantanea P(t) = p(t)^T 𝔸 p(t).
-
-    Nota: como o vetor de condutancias muda a cada realizacao
-    estocastica (e o passo de tempo pode mudar entre cenarios, ja que o
-    Exercicio 2 pede dt=0.05 e dt=0.1), tanto a rede (A_net) quanto
-    Aglob (que depende de dt) precisam ser remontados aqui -- somente
-    as matrizes da membrana (K_mem, M_mem) sao reaproveitadas de GD,
-    pois nao dependem da falha hidraulica.
-
-    Retorna (Aglob_falha, A_potencia, pref).
-    """
+    """Reconstroi a matriz global e a matriz de potencia para uma realizacao com falhas."""
     params = GD['params']
     conec = GD['conec']
 
@@ -750,11 +555,7 @@ def MontaSistemaFalho(GD, C_real, dt):
         GD['n_inlet'], GD['n_outlet']
     )
 
-    # ---- Matriz "fisica" D^T K D, adimensionalizada, SEM a -------------
-    # substituicao da linha do Inlet (usada apenas para o calculo de
-    # P(t), e nao para a resolucao do sistema). O fator de escala e o
-    # mesmo aplicado internamente na montagem de Aglob (Secao 5.2.4 do
-    # PDF: A_adim = A_dimensional * pref / (vref * R_fisico**2)).
+    # ---- Matriz "fisica" D^T K D, adimensionalizada -------------
     fator_escala = pref / (vref * params['R_fisico'] ** 2)
     A_potencia = A_net_falha_sparse * fator_escala
 
@@ -762,20 +563,7 @@ def MontaSistemaFalho(GD, C_real, dt):
 
 
 def SimulaEnergiaDissipada(GD, C_real, dt, t_max, p_inlet_dim, t_i=0.0):
-    """
-    Executa UMA realizacao transiente completa do Gemeo Digital
-    (acoplamento forte multifisico: membrana + rede + placa, ja
-    embutida em GD['C']/`C_real`), para uma instancia de rede com
-    falhas `C_real`, e calcula o indicador energetico
-
-        E = integral_{t_i}^{t_f} P(t) dt ,   P(t) = p(t)^T 𝔸 p(t)
-
-    via a regra do trapezio (np.trapz), integrando a potencia
-    hidraulica instantanea dissipada no reservatorio ao longo da
-    trajetoria temporal.
-
-    Retorna (E, P_hist, tempos).
-    """
+    """Executa uma simulacao transiente e calcula a energia dissipada total."""
     nm = GD['nm']
     np_net = GD['np_net']
     n_inlet = GD['n_inlet']
@@ -804,17 +592,7 @@ def MonteCarloEnergiaDinamica(GD, pO, fObs, dt, N, t_max=4.0,
                                p_inlet_dim=None, E_critico=7.0,
                                rng=None, retornar_amostras=False,
                                imprimir_progresso=True):
-    """
-    Executa N realizacoes de Monte Carlo do GD COMPLETO (acoplamento
-    forte multifisico, Secao 6.3.2, Item 2), cada uma com uma instancia
-    de falha estocastica distinta dos microcanais (RandomFail, mesma
-    hipotese p_O / f_obs do Item 1), avaliando se a energia total
-    dissipada E fica abaixo do limite critico `E_critico`.
-
-    Retorna a probabilidade estimada Prob(E < E_critico) e,
-    opcionalmente (retornar_amostras=True), o vetor completo das N
-    amostras de E (util para histogramas e analises adicionais).
-    """
+    """Executa Monte Carlo do exercicio dinamico e estima Prob(E < E_critico)."""
     if p_inlet_dim is None:
         p_inlet_dim = GD['params']['p_inlet_dim']
     if rng is None:
@@ -843,31 +621,8 @@ def RodaExercicio2_AnaliseDinamica(GD, E_critico=7.0, pO=0.6,
                                     fObs_lista=(5, 10), dt_lista=(0.05, 0.1),
                                     N=2000, t_max=4.0, p_inlet_dim=None,
                                     semente=123):
-    """
-    Resolve o Exercicio 2 da Secao 6.3.2 do PDF (Analise Dinamica do
-    Gemeo Digital Completo):
+    """Executa a analise dinamica do Exercício 2 e retorna os resultados."""
 
-        - Acoplamento forte multifisico completo (membrana 51x51 +
-          rede hidraulica + placa termica, ja embutidos em `GD`);
-        - Falha estocastica dos microcanais sob probabilidade
-          individual p_O (mesma RandomFail() do Item 1);
-        - Indicador energetico E = integral_0^4 P(t) dt, com
-          P(t) = p(t)^T 𝔸 p(t);
-        - Estima Prob(E < E_critico) para dt = 0.05 e dt = 0.1, com
-          N = 2000 realizacoes cada, contrastando dois fatores de
-          severidade de obstrucao f_obs = 5 e f_obs = 10 (mesmos
-          valores investigados no Exercicio 1).
-
-    NOTA SOBRE p_O: o enunciado do Item 2 nao especifica um novo valor
-    para p_O (apenas diz "mantendo a hipotese de falha sob
-    probabilidade individual p_O"), entao adota-se aqui, por padrao, o
-    MESMO cenario representativo ja usado no estudo de convergencia do
-    Exercicio 1 (p_O = 0.6). Ajuste o argumento `pO` se um valor
-    diferente for desejado.
-
-    Retorna um dicionario com todos os resultados numericos gerados,
-    indexados por (f_obs, dt).
-    """
     if p_inlet_dim is None:
         p_inlet_dim = GD['params']['p_inlet_dim']
 
@@ -900,17 +655,7 @@ def RodaExercicio2_AnaliseDinamica(GD, E_critico=7.0, pO=0.6,
     return resultados
 
 def PlotaExercicio2_AnaliseDinamica(resultados, save_path=None):
-    """
-    Gera um painel com dois graficos comparativos para o Exercicio 2:
-
-        (a) Prob(E < E_critico) em funcao do passo de tempo dt,
-            contrastando os dois fatores de severidade f_obs;
-        (b) Histogramas sobrepostos da distribuicao amostral de E para
-            cada combinacao (f_obs, dt), permitindo visualizar o
-            impacto do passo de tempo na precisao estatistica do
-            estimador (dispersao da amostra em torno do limite
-            E_critico).
-    """
+    """Plota a probabilidade estimada e os histogramas da energia."""
     fObs_lista = resultados['fObs_lista']
     dt_lista = resultados['dt_lista']
     E_critico = resultados['E_critico']
@@ -967,10 +712,7 @@ def PlotaExercicio2_AnaliseDinamica(resultados, save_path=None):
 # ========================================================================
 
 def Interpola_Potencia_Linear(t_dados, P_dados):
-    """ 
-    Exercício 1: Interpolação Linear Local (Splines lineares).
-    Retorna uma função avaliável que liga os dados por retas.
-    """
+    """Interpoe os dados de potencia com spline linear."""
     return interp1d(t_dados, P_dados, kind='linear')
 
 
@@ -980,10 +722,7 @@ def Interpola_Potencia_Linear(t_dados, P_dados):
 # ========================================================================
 
 def Interpola_Potencia_Cubica(t_dados, P_dados):
-    """ 
-    Exercício 2: Interpolação Cúbica Local (Splines cúbicos).
-    Retorna uma função avaliável garantindo suavidade nas interfaces.
-    """
+    """Interpoe os dados de potencia com spline cubica."""
     return interp1d(t_dados, P_dados, kind='cubic')
 
 
@@ -1000,21 +739,8 @@ def Interpola_Potencia_Cubica(t_dados, P_dados):
 # Regressão Polinomial Global
 # ========================================================================
 
-# parte da nat vai aqui
 def Regressao_Polinomial_Global(t_dados, P_dados, graus=None):
-    """
-    Exercício 3: Regressão Polinomial Global pelo Método dos Mínimos Quadrados.
-
-    Para cada grau m em `graus`, ajusta um polinômio global aos dados
-    (t_dados, P_dados) e calcula o erro L2 (Eq. 6.14):
-        e = sqrt( integral_{t0}^{tf} [p(t) - P(t)]^2 dt )
-    via regra do trapézio.
-
-    Retorna um dicionário com:
-        'graus'        : lista de graus testados
-        'coeficientes' : {m: coefs} — coeficientes do np.polyfit
-        'erros_L2'     : {m: e}     — erro L2 de cada grau
-    """
+    """Ajusta polinomios globais aos dados e calcula o erro L2."""
     if graus is None:
         graus = list(range(3, 16))
 
@@ -1034,16 +760,7 @@ def Regressao_Polinomial_Global(t_dados, P_dados, graus=None):
 
 
 def SimulaEnergiaDissipada_Ruidosa(GD, dt, t_max, p_inlet_dim, seed=None):
-    """
-    Exercício 4: variante ruidosa de SimulaEnergiaDissipada.
-
-    Em cada passo de tempo aplica uma perturbação uniforme U(-0.15, 0.15)
-    à pressão de entrada adimensional:
-        p_inlet(t) = (p_inlet_dim / p_ref) * [1 + U(-0.15, 0.15)]
-
-    Retorna (E, P_hist, tempos) — mesma assinatura que
-    SimulaEnergiaDissipada, porém com sinal de potência ruidoso.
-    """
+    """Versao ruidosa de SimulaEnergiaDissipada com perturbacao na entrada."""
     rng = np.random.default_rng(seed)
 
     nm = GD['nm']
@@ -1080,21 +797,7 @@ def SimulaEnergiaDissipada_Ruidosa(GD, dt, t_max, p_inlet_dim, seed=None):
 
 def Analise_Ruido_Estocastico(GD, dt, t_max, p_inlet_dim,
                                graus=None, N_realizacoes=10, seed=42):
-    """
-    Exercício 4: Análise de sensibilidade a ruídos estocásticos.
-
-    Gera N_realizacoes trajetórias ruidosas de P(t) e, para cada uma,
-    aplica a regressão polinomial global (Exercício 3) nos graus
-    especificados.
-
-    Retorna um dicionário com:
-        'tempos'          : vetor de tempo (igual para todas as realizações)
-        'P_ruidoso_medio' : média de P(t) sobre as N realizações
-        'P_realizacoes'   : lista com os N vetores P_hist ruidosos
-        'erros_L2_medio'  : {m: média do erro L2 sobre as N realizações}
-        'erros_L2_todas'  : {m: lista com N erros L2}
-        'graus'           : graus testados
-    """
+    """Executa varias realizacoes ruidosas e compara os erros de regressao."""
     if graus is None:
         graus = list(range(3, 16))
 
@@ -1142,12 +845,7 @@ def Analise_Ruido_Estocastico(GD, dt, t_max, p_inlet_dim,
 # ========================================================================
 
 def CopiaParams645(params_base, TC=None, H_um=None, dt=None):
-    """
-    Copia os parâmetros do caso nominal e altera apenas TC, H ou dt.
-
-    TC   em graus Celsius.
-    H_um em micrometros.
-    """
+    """Copia os parametros do caso base alterando TC, H_um ou dt."""
     params = params_base.copy()
 
     if TC is not None:
@@ -1163,45 +861,21 @@ def CopiaParams645(params_base, TC=None, H_um=None, dt=None):
 
 
 def _matriz_A_scaled_sem_bc(GD):
-    """
-    Reconstrói a matriz hidráulica adimensional SEM impor a linha de pressão
-    prescrita no inlet.
-
-    Essa matriz é usada para:
-        P(t) = p^T A p
-        q_inlet = linha_inlet(A) @ p
-    """
     params = GD["params"]
     fator_escala = GD["pref"] / (GD["vref"] * params["R_fisico"] ** 2)
     return sparse.csr_matrix(GD["A_net"]) * fator_escala
 
 def _row_dot_scalar(A, i, x):
-    """
-    Calcula produto da linha i da matriz A pelo vetor x e devolve escalar float.
-    Funciona mesmo quando A é matriz esparsa e o resultado sai como array 1D/2D.
-    """
     return float(np.asarray(A.getrow(i).dot(x)).ravel()[0])
 
 
 def _derivada_A_scaled_H_sem_bc(GD):
-    """
-    Como A(H) = H^4 A0, então dA/dH = (4/H) A(H).
-
-    Aqui H está em metros, então essa derivada é em relação a H_m.
-    """
     H_m = GD["params"]["H_k"]
     A_scaled = _matriz_A_scaled_sem_bc(GD)
     return (4.0 / H_m) * A_scaled
 
 
 def _derivada_A_scaled_H_com_bc(GD):
-    """
-    Derivada da matriz hidráulica adimensional COM a condição de pressão
-    prescrita no inlet.
-
-    A linha do inlet vira uma linha da identidade em Monta_Matriz_Global_Acoplada.
-    Como essa linha não depende de H, sua derivada é zero.
-    """
     dA = _derivada_A_scaled_H_sem_bc(GD).tolil()
     n_inlet = GD["n_inlet"]
     dA[n_inlet, :] = 0.0
@@ -1210,22 +884,7 @@ def _derivada_A_scaled_H_com_bc(GD):
 
 def SimulaCaso645(params_base, TC=None, H_um=None, t_max=4.0, dt=0.05,
                   calcular_direto_H=False):
-    """
-    Roda uma simulação transiente do Gêmeo Digital para um valor de TC e H.
-
-    Retorna:
-        E       = integral de P(t) no intervalo [0, t_max]
-        qin_tf  = vazão de entrada no tempo final
-        V_tf    = volume acumulado no reservatório no tempo final
-
-    Se calcular_direto_H=True, também calcula as derivadas diretas:
-        dE_dH_direct
-        dqin_dH_direct
-        dV_dH_direct
-
-    As derivadas diretas são retornadas em relação a H em micrometros,
-    para ficarem comparáveis com as diferenças finitas feitas em H_um.
-    """
+    """Roda uma simulacao transiente do caso 6.4.5 para TC e H."""
     params = CopiaParams645(params_base, TC=TC, H_um=H_um, dt=dt)
     GD = MontaGemeoDigital(params)
 
@@ -1353,9 +1012,6 @@ def _derivada_centrada(fm, fp, eps):
 
 
 def _sensibilidade_parametro(params_base, parametro, valores, eps, t_max, dt):
-    """
-    Calcula as derivadas por forward e centered difference para TC ou H.
-    """
     E = []
     qin = []
     V = []
@@ -1433,19 +1089,7 @@ def _sensibilidade_parametro(params_base, parametro, valores, eps, t_max, dt):
 
 
 def RodaExercicio645_Sensibilidade(params_base, t_max=4.0, dt=0.05):
-    """
-    Resolve o Exercício 1 da Seção 6.4.5.
-
-    Parâmetros:
-        TC em [0, 250] °C
-        H  em [500, 1500] micrometros
-
-    Saídas:
-        E, qin(tf), V(tf)
-        derivadas forward
-        derivadas centered
-        derivadas diretas em relação a H
-    """
+    """Executa a analise de sensibilidade do Exercício 6.4.5."""
     TC_grid = np.linspace(0.0, 250.0, 6)
     H_grid = np.linspace(500.0, 1500.0, 6)
 
@@ -1473,14 +1117,7 @@ def RodaExercicio645_Sensibilidade(params_base, t_max=4.0, dt=0.05):
 
 
 def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
-    """
-    Gera 5 figuras organizadas para o exercício 6.4.5:
-      1) Saídas vs TC
-      2) Sensibilidades vs TC
-      3) Saídas vs H
-      4) Sensibilidades vs H (forward e centered)
-      5) Comparação centered vs método direto em H
-    """
+    """Plota as saídas e sensibilidades do Exercício 6.4.5."""
 
     # ==========================================================
     # FIGURA 1 - SAÍDAS EM FUNÇÃO DE TC
@@ -1656,16 +1293,12 @@ import matplotlib.pyplot as plt
 # ou que o seu código original já esteja lidando com ela!
 
 def funcao_energia_H(GD_params, H_um, E_alvo=7.5):
-    """
-    Calcula f(H) = E(H) - E_alvo.
-    """
+    """Retorna f(H) = E(H) - E_alvo."""
     resultado = SimulaCaso645(GD_params, H_um=H_um)
     return resultado["E"] - E_alvo
 
 def derivada_forward_energia(GD_params, H_um, E_alvo=7.5, eps=1.0):
-    """
-    Aproxima f'(H) por diferença finita progressiva.
-    """
+    """Aproxima a derivada de E(H) por diferenca finita progressiva."""
     f_H = funcao_energia_H(GD_params, H_um, E_alvo)
     f_H_plus = funcao_energia_H(GD_params, H_um + eps, E_alvo)
 
@@ -1681,10 +1314,7 @@ def newton_raphson_energia(
     H_min=500.0,
     H_max=1500.0
 ):
-    """
-    Resolve f(H) = E(H) - E_alvo = 0 pelo método de Newton-Raphson.
-    Retorna o H encontrado e o histórico das iterações.
-    """
+    """Resolve E(H) = E_alvo por Newton-Raphson."""
 
     H = float(H_chute)
     historico = []
@@ -1716,9 +1346,7 @@ def newton_raphson_energia(
     return H, historico
 
 def plotar_raiz_energia(GD_params, H_otimo, E_alvo=7.5):
-    """
-    Plota f(H) = E(H) - E_alvo no intervalo físico considerado.
-    """
+    """Plota E(H) - E_alvo no intervalo fisico."""
 
     Hs = np.linspace(500, 1500, 50)
     fs = []
@@ -1740,6 +1368,4 @@ def plotar_raiz_energia(GD_params, H_otimo, E_alvo=7.5):
     plt.legend()
     plt.savefig("grafico_raiz_newton.pdf", bbox_inches="tight")
     plt.show()
-# =======================================================================================
-# CONCLUSÃO
-# =======================================================================================
+
