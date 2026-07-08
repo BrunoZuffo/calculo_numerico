@@ -204,9 +204,7 @@ print("\n" + "="*70)
 print(f"{'CÁLCULO DA ENERGIA ELÁSTICA MÉDIA (Curva de Ressonância - Malha 101x101)':^70}")
 print("="*70)
 
-
-
-num_modos_ex5 = 200
+num_modos_ex5 = 700
 lambdas_ex5, Phi_ex5 = eigsh(K, k=num_modos_ex5, M=M, which='SM')
 
 idx_ex5 = np.argsort(lambdas_ex5)
@@ -215,10 +213,13 @@ Phi_ex5 = Phi_ex5[:, idx_ex5]
 
 # Frequências naturais para este bloco
 omega_i_ex5 = np.sqrt(np.abs(lambdas_ex5))
-
-
-
 alpha_ex5 = DecomposicaoModal(Phi_ex5, M, Z)
+
+# CORREÇÃO 1: Cálculo da massa modal (Phi_i^T * M * Phi_i) para cada modo
+massa_modal = np.zeros(num_modos_ex5)
+for i in range(num_modos_ex5):
+    phi_i = Phi_ex5[:, i]
+    massa_modal[i] = phi_i.T @ (M @ phi_i)
 
 # Definindo o vetor de frequências de excitação (escala logarítmica de 0.5 a 100)
 omega_star = np.logspace(np.log10(0.5), np.log10(100), 2000)
@@ -234,10 +235,12 @@ for beta in betas:
     for k_idx, w_star in enumerate(omega_star):
         # Calculando os coeficientes c_i para a frequência w_star atual
         denominador = np.sqrt((-w_star**2 + omega_i_ex5**2)**2 + (beta * w_star)**2)
-        c_i = alpha_ex5 / denominador
         
-        # Calculando a energia elástica média
-        Ae[k_idx] = 0.25 * np.sum((c_i**2) * (omega_i_ex5**2))
+        # Conforme a primeira foto, c_i leva o módulo de alpha
+        c_i = np.abs(alpha_ex5) / denominador 
+        
+        # CORREÇÃO 2: Adicionando a massa_modal na fórmula da energia elástica média
+        Ae[k_idx] = 0.25 * np.sum((c_i**2) * (omega_i_ex5**2) * massa_modal)
         
     # Plotando a curva para o beta atual
     plt.loglog(omega_star, Ae, label=f'$\\beta$ = {beta}')
