@@ -50,7 +50,7 @@ def SolveNetwork(conec: list[list], C:list, ps=None, Qs=None):
     pressure = np.linalg.solve(Atilde, b)
     return pressure
 
-# Cálculo das vazões nos canos - Bosi 
+# Cálculo das vazões nos canos
 
 def createK (C, nc):
     # criar a matriz K
@@ -67,10 +67,8 @@ def createD (conec, nv, nc):
     D = np.zeros((nc,nv))
     for k in range (nc):
       for j in range (nv):
-        #if j == conec [k][0]-1:
         if j == conec [k][0]:
           D[k][j] = 1
-        #elif j == conec [k][1]-1:
         elif j == conec [k][1]:
           D[k][j] = -1
 
@@ -78,34 +76,27 @@ def createD (conec, nv, nc):
 
 def calc_vazao (conec, C, pressure):
 
-    #nv = conec.max() #o valor maximo da matriz conec é igual ao numero de nos
     nv = int(conec.max() + 1)
     nc = len(conec) #o numero de linhas da matriz conec é igual ao numero de canos
-    # Q = KDp
-
     K = createK (C, nc)
     D = createD (conec, nv,nc)
-
     Q = K @ D @ pressure
 
     return Q
 
-# Cálculo da Potência - Bosi 
+# Cálculo da potência
 
 def calc_potencia (conec, C, pressure):
    
-    #nv = conec.max() #o valor maximo da matriz conec é igual ao numero de nos
     nv = int(conec.max() + 1)
     nc = len(conec) #o numero de linhas da matriz conec é igual ao numero de canos
-
     K = createK (C, nc)
     D = createD (conec, nv,nc)
-
     W = pressure.T @ (D.T @ K @ D) @ pressure
 
     return W
 
-#calculo condutancia - Victor Hugo
+# Cálculo da condutância
 def CalculoCondutancia(Lk, H_k=None, mu=None):
     pi = np.pi
     Ak = 2.5 * 10**(-7)
@@ -116,24 +107,6 @@ def CalculoCondutancia(Lk, H_k=None, mu=None):
     Ck = kk / Lk
     
     return Ck
-
-#função que calcula o comprimento do cano k (Lk) para montar o vetor de condutancias C- Matheus
-#def AssemblyVectorC(conec, Xno):
-#    nc = len(conec)
-#    C = np.zeros(nc) #vetor de condutancias
-#
-#    for k in range (nc):
-#        n1 = conec[k,0]
-#        n2 = conec[k,1]
-#
-#        x1, y1 = Xno[n1,0], Xno[n1, 1]
-#        x2, y2 = Xno[n2,0], Xno[n2, 1]
-#
-#        Lk = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-#
-#        C[k] = CalculoCondutancia(Lk)
-#    
-#    return C
 
 def AssemblyVectorC(conec, Xno, H_k=None, mu=None):
     nc = len(conec)
@@ -158,11 +131,10 @@ def AssemblyVectorC(conec, Xno, H_k=None, mu=None):
 
 def PlotaRede(conec, Xno, p, q, factor_units=0.001):
 
-    #edges = np.array(conec) - 1
-    edges = np.array(conec)
+    edges = conec
     coord = Xno
-    nv = np.max(edges) + 1
-    nc = edges.shape[0]
+    nv = np.max(np.max(conec))+1
+    nc = conec.shape[0]
 
     # Internal: get edge and midpoint coordinates
     segs = []

@@ -35,8 +35,8 @@ plt.show()
 # ==============================================================================
 # OBSERVAÇÃO SOBRE A INDEXAÇÃO DOS NÓS NAS CONDIÇÕES DE CONTORNO (ps e Qs)
 # ------------------------------------------------------------------------------
-# A função `SolveNetwork` foi originalmente construída com a instrução interna 
-# `i = int(node) - 1`. Isso foi feito para converter numerações amigáveis 
+# A função SolveNetwork foi originalmente construída com a instrução interna 
+# i = int(node) - 1. Isso foi feito para converter numerações naturais 
 # (nós de 1 a N) para os índices nativos do Python (que vão de 0 a N-1).
 #
 # Logo, passar o index do nó do dicionário foi feito da seguinte forma:
@@ -101,8 +101,8 @@ pressao_maxima_ex4 = []
 pressao_maxima_ex5 = []
 
 for t in t_array:
-    # Calcular vazões reais no instante t (em m³/s)
-    # 1 mL/s = 1.0e-6 m³/s
+    # Calcular vazões reais no instante t (em m^3/s)
+    # 1 mL/s = 1.0e-6 m^3/s
     Q_t_sin = (1.0 + 0.1 * np.sin(omega_sin * t)) * 1.0e-6
     Q_t_cos = (0.1 + 0.01 * np.cos(omega_cos * t)) * 1.0e-6
     
@@ -114,7 +114,7 @@ for t in t_array:
     p_t_ex5 = p_base_vetor_sin * Q_t_sin + p_base_vetor_cos * Q_t_cos
     pressao_maxima_ex5.append(np.max(p_t_ex5))
 
-# Plotando os resultados comparativos
+# Plots
 plt.figure(figsize=(10, 6))
 plt.plot(t_array, pressao_maxima_ex4, color='blue', linestyle='--', linewidth=2, label='Ex 4 (Apenas Nó 0)')
 plt.plot(t_array, pressao_maxima_ex5, color='purple', linewidth=2, label='Ex 5 (Nós 0 e 175)')
@@ -123,7 +123,6 @@ plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle=':', alpha=0.7)
 plt.legend(loc="upper right")
-#plt.savefig('fig_superposicao.pdf', format='pdf', bbox_inches='tight')
 plt.show()
 
 # D: Item 6
@@ -133,7 +132,6 @@ t_array = np.linspace(0, 10, 100)
 ps_D = {str(n_outlet + 1): 0}
 Qs_D = {'1': 1.0e-7}
 
-# Pré-cálculo O(N^3) executado APENAS UMA VEZ com as propriedades base (20°C)
 pressure_base_D = SolveNetwork(conec, C, ps=ps_D, Qs=Qs_D)
 max_pressure_base = np.max(pressure_base_D)
 
@@ -144,7 +142,6 @@ for t in t_array:
     T_t = 20 + 0.9 * (t**2)
     mu_t = 0.001791 / (1 + 0.03368 * T_t + 0.000221 * (T_t**2))
 
-    # Atualização O(1) do campo de pressões via relação algébrica
     p_max_t = max_pressure_base * (mu_t / mu_0)
     max_pressure.append(p_max_t)
 
@@ -154,12 +151,10 @@ plt.title("Efeito do Aquecimento na Pressão Máxima")
 plt.xlabel("Tempo (s)")
 plt.ylabel("Pressão Máxima na Rede (Pa)")
 plt.grid(True, linestyle='--', alpha=0.7)
-#plt.savefig('fig_aquecimento.pdf', format='pdf', bbox_inches='tight')
 plt.show()
 
 # E: Item 7
 
-#Cabeçalho da tabela
 print(f"{'Nível':<7} | {'Qtd. Nós':<10} | {'T. Montagem (s)':<18} | {'T. Resolução (s)':<18}")
 print("-" * 62)
 
@@ -203,15 +198,6 @@ for level in [1,2,3,4]:
     media_montagem = np.mean(tempos_montagem)
     media_resolucao = np.mean(tempos_resolucao)
 
-    #Linha da tabela
     print(f"{level:<7} | {n_nos:<10} | {media_montagem:<18.6f} | {media_resolucao:<18.6f}")
-
-
-# RESULTADOS E PLOTS
-
-#Rede Hidráulica
-
-#CORRIGIR ERRO
-# fig, ax = PlotaRede(conec, Xno, pressure_A, matriz_vazao_A, factor_units=mm_to_m)
 
 plt.show()
