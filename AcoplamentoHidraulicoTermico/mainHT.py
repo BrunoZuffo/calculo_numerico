@@ -1,3 +1,9 @@
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import sparse
@@ -15,6 +21,38 @@ from functionsHT import (ObterCondutividadeFaces_ViaNos, CriarSistemaSolidoCondu
                          obter_limites_e_niveis_individuais, plotar_rede_sobre_ax)
 
 from RedeHidraulica.functions import SolveNetwork, calc_vazao, calc_potencia, GeraGrafo, Assembly as AssemblyHidraulico
+
+from pathlib import Path
+
+PASTA_ATUAL = Path(__file__).resolve().parent
+OUT_DIR = PASTA_ATUAL / "resultados"
+OUT_DIR.mkdir(exist_ok=True)
+
+def salvar_figura(fig, nome):
+    nome_seguro = "".join(
+        c if c.isalnum() or c in "-_." else "_"
+        for c in nome
+    )
+
+    caminho_png = OUT_DIR / f"{nome_seguro}.png"
+    caminho_pdf = OUT_DIR / f"{nome_seguro}.pdf"
+
+    # Remove arquivos antigos, se não estiverem travados
+    for caminho in [caminho_png, caminho_pdf]:
+        if caminho.exists():
+            try:
+                caminho.unlink()
+            except PermissionError:
+                print(f"[AVISO] Arquivo aberto/travado: {caminho}")
+                caminho_png = OUT_DIR / f"{nome_seguro}_novo.png"
+                caminho_pdf = OUT_DIR / f"{nome_seguro}_novo.pdf"
+                break
+
+    fig.savefig(str(caminho_png), dpi=300, bbox_inches="tight")
+    fig.savefig(str(caminho_pdf), bbox_inches="tight")
+
+    print(f"[SALVO] {caminho_png}")
+    print(f"[SALVO] {caminho_pdf}")
 
 # -----------------------------------------------------------------------------
 # CÓDIGO BASE - define os parâmetros da placa e executa as funções base
@@ -153,6 +191,10 @@ cbarA_cont.set_label('Temperatura (°C)', fontsize=11)
 cbarA_graf = figA_graf.colorbar(sc, ax=axesA_graf.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
 cbarA_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
 
+salvar_figura(figA_cont, "ex2_casoA_contornos_interpolacao")
+salvar_figura(figA_graf, "ex2_casoA_temperaturas_nos_hidraulicos")
+plt.close(figA_cont)
+plt.close(figA_graf)
 plt.show()
 
 # ---------------------------------------------------
@@ -209,7 +251,10 @@ cbarB_cont.set_label('Temperatura (°C)', fontsize=11)
 cbarB_graf = figB_graf.colorbar(sc61, ax=axesB_graf.ravel().tolist(), orientation='horizontal', shrink=0.4, aspect=40)
 cbarB_graf.set_label('Temperatura do Nó (°C)', fontsize=11)
 
-plt.show()
+salvar_figura(figB_cont, "ex2_casoB_contornos_interpolacao")
+salvar_figura(figB_graf, "ex2_casoB_temperaturas_nos_hidraulicos")
+plt.close(figB_cont)
+plt.close(figB_graf)
 
 # -----------------------------------------------------------------------------
 # EXERCÍCIO 3, PARTE 1
@@ -289,8 +334,58 @@ print(f"Pressão Máxima (Acoplada Corrigida):  {P_max_mod:.2f} Pa")
 print(f"Variação da Perda de Carga Realizada: {((P_max_mod - P_max_iso)/P_max_iso)*100:.2f}%")
 print("-" * 80)
 
-# Renderização dos perfis de controle térmico do fluido
-plot_arestas_cromaticas_hidraulics(conec, Xno, T_arestas_final, titulo="Distribuição Térmica Integrada nas Arestas da Rede (N=1000)")
+from matplotlib.collections import LineCollection
+
+# ---------------------------------------------------------------------
+# EXERCÍCIO 3 - DISTRIBUIÇÃO TÉRMICA NAS ARESTAS DA REDE
+# ---------------------------------------------------------------------
+fig_ex3, ax_ex3 = plt.subplots(figsize=(10, 5))
+
+segmentos = []
+temperaturas_segmentos = []
+
+for k in range(len(conec)):
+    n1 = int(conec[k, 0])
+    n2 = int(conec[k, 1])
+
+    p1 = Xno[n1]
+    p2 = Xno[n2]
+
+    segmentos.append([p1, p2])
+    temperaturas_segmentos.append(T_arestas_final[k])
+
+lc = LineCollection(
+    segmentos,
+    array=np.array(temperaturas_segmentos),
+    cmap="jet",
+    linewidths=2.0
+)
+
+ax_ex3.add_collection(lc)
+
+# Nós da rede
+ax_ex3.scatter(
+    Xno[:, 0],
+    Xno[:, 1],
+    c="black",
+    s=12,
+    zorder=3
+)
+
+cbar = fig_ex3.colorbar(lc, ax=ax_ex3)
+cbar.set_label("Temperatura média na aresta (°C)")
+
+ax_ex3.set_title("Distribuição térmica integrada nas arestas da rede (N = 1000)")
+ax_ex3.set_xlabel("x (m)")
+ax_ex3.set_ylabel("y (m)")
+ax_ex3.set_aspect("equal")
+ax_ex3.grid(True, linestyle="--", alpha=0.3)
+
+ax_ex3.autoscale()
+plt.tight_layout()
+
+salvar_figura(fig_ex3, "ex3_distribuicao_termica_arestas")
+plt.close(fig_ex3)
 
 # -----------------------------------------------------------------------------
 # EXERCÍCIO 4, PARTE 1
@@ -359,18 +454,20 @@ for Nx, Ny in lista_malhas_termicas:
                     s = np.linspace(0.5 / nsub, 1 - 0.5 / nsub, nsub)
                     pts = p1 + np.outer(s, p2 - p1)
                     T_arestas[k] = np.mean(interpolador_T(pts))
-            # Guarda o estado da malha mais refinada para compor o gráfico final
-            if Nx == 241 and metodo == "trapezio" and nsub == 1000:
-                T_arestas_final_ex4 = T_arestas.copy()
-                interpolador_final_ex4 = interpolador_T
-                pressure_final_ex4 = pressure_T.copy() # ADICIONADO: Salva o vetor de pressões
-                T_matriz_final_ex4 = T_flat_ex4.reshape((Ny, Nx)).copy() # ADICIONADO: Salva a matriz 2D de temperatura
+
             # 2. Atualização das condutâncias hidráulicas baseadas em T_arestas
             C_T = atualiza_condutancias(conec_ex4, Xno_ex4, T_arestas, Area_canal_ex4)
             # 3. Solução do escoamento na rede hidráulica
             pressure_T = SolveNetwork(conec_ex4, C_T, ps=ps_hid_ex4, Qs=Qs_hid_ex4)
             # 4. Cálculo da Potência dissipada
             W_T = calc_potencia(conec_ex4, C_T, pressure_T)
+
+            if Nx == 241 and metodo == "trapezio" and nsub == 1000:
+                T_arestas_final_ex4 = T_arestas.copy()
+                interpolador_final_ex4 = interpolador_T
+                pressure_final_ex4 = pressure_T.copy()
+                T_matriz_final_ex4 = T_flat_ex4.reshape((Ny, Nx)).copy()
+
             resultados_ex4.append({
                 "malha_termica": f"{Nx}x{Ny}",
                 "metodo_quadratura": metodo,
@@ -390,6 +487,64 @@ if T_arestas_final_ex4 is None:
 # Geração das Tabelas ASCII Formatadas
 # ---------------------------------------------------------------------
 df_ex4 = pd.DataFrame(resultados_ex4)
+
+csv_ex4 = OUT_DIR / "resultados_exercicio4_cap4.csv"
+df_ex4.to_csv(csv_ex4, index=False)
+print(f"[SALVO] {csv_ex4}")
+
+#latex_ex4 = OUT_DIR / "tabela_resultados_ex4.tex"
+#df_ex4.to_latex(latex_ex4, index=False, float_format="%.6g")
+#print(f"[SALVO] {latex_ex4}")
+
+# ---------------------------------------------------------------------
+# GRÁFICO 1: PRESSÃO MÁXIMA
+# ---------------------------------------------------------------------
+fig_pressao, ax_pressao = plt.subplots(figsize=(8, 5))
+
+for (malha, metodo), grupo in df_ex4.groupby(["malha_termica", "metodo_quadratura"]):
+    grupo = grupo.sort_values("nsub")
+    ax_pressao.plot(
+        grupo["nsub"],
+        grupo["pressao_max"],
+        marker="o",
+        label=f"{malha} - {metodo}"
+    )
+
+ax_pressao.set_xscale("log")
+ax_pressao.set_xlabel("Número de subintervalos da quadratura")
+ax_pressao.set_ylabel("Pressão máxima da rede (Pa)")
+ax_pressao.set_title("Pressão máxima em função da quadratura térmica")
+ax_pressao.grid(True, which="both", linestyle="--", alpha=0.5)
+ax_pressao.legend(fontsize=8)
+
+salvar_figura(fig_pressao, "ex4_pressao_maxima")
+plt.close(fig_pressao)
+
+
+# ---------------------------------------------------------------------
+# GRÁFICO 2: POTÊNCIA TOTAL
+# ---------------------------------------------------------------------
+fig_potencia, ax_potencia = plt.subplots(figsize=(8, 5))
+
+for (malha, metodo), grupo in df_ex4.groupby(["malha_termica", "metodo_quadratura"]):
+    grupo = grupo.sort_values("nsub")
+    ax_potencia.plot(
+        grupo["nsub"],
+        grupo["potencia_total"],
+        marker="o",
+        label=f"{malha} - {metodo}"
+    )
+
+ax_potencia.set_xscale("log")
+ax_potencia.set_xlabel("Número de subintervalos da quadratura")
+ax_potencia.set_ylabel("Potência total dissipada (W)")
+ax_potencia.set_title("Potência total em função da quadratura térmica")
+ax_potencia.grid(True, which="both", linestyle="--", alpha=0.5)
+ax_potencia.legend(fontsize=8)
+
+salvar_figura(fig_potencia, "ex4_potencia_total")
+plt.close(fig_potencia)
+
 print("\n" + "="*85)
 print(" TABELA DE RESULTADOS FÍSICOS (TEMPERATURAS E PRESSÃO)")
 print("="*85)
@@ -455,7 +610,8 @@ cax_T = divider.append_axes("right", size="2.5%", pad=0.2)
 cbar_T = fig.colorbar(cont, cax=cax_T)
 cbar_T.set_label('Temperature, T', fontsize=10)
 
-plt.show()
+salvar_figura(fig, "ex4_campo_termico_pressao_rede")
+plt.close(fig)
 
 # -----------------------------------------------------------------------------
 # EXERCÍCIO 1, PARTE 1
@@ -575,7 +731,10 @@ for Nx, Ny in lista_malhas_ex5:
         ax2d.set_ylabel('Posição Y (m)')
         ax2d.set_aspect('equal')
         plt.tight_layout()
-        plt.show()
+
+        nome_fig = f"ex5_mapa_2d_malha_{Nx}x{Ny}_dmax_{str(d_max).replace('.', 'p')}"
+        salvar_figura(fig2d, nome_fig)
+        plt.close(fig2d)
     # -----------------------------------------------------------------
     # 5. PLOT DOS PERFIS UNIDIMENSIONAIS COMBINADOS (Por nível de malha)
     # -----------------------------------------------------------------
@@ -599,7 +758,10 @@ for Nx, Ny in lista_malhas_ex5:
     ax_perf[1].legend()
     
     plt.tight_layout()
-    plt.show()
+
+    nome_fig = f"ex5_perfis_malha_{Nx}x{Ny}"
+    salvar_figura(fig_perf, nome_fig)
+    plt.close(fig_perf)
 # =========================================================================
 # RELATÓRIO DE DESEMPENHO E ANÁLISE PARAMÉTRICA VIA TERMINAL
 # =========================================================================
@@ -740,7 +902,8 @@ for i, item in enumerate(resultados_ex2):
     ax.set_xlim(0.0, Lx_cap4)
     ax.set_ylim(0.0, Ly_cap4)
 
-plt.show()
+salvar_figura(fig, "ex2_fonte_mapas_temperatura_homogenea")
+plt.close(fig)
 
 
 # ==============================================================================
@@ -770,7 +933,8 @@ for i, item in enumerate(resultados_ex2):
     ax.set_xlim(0.0, Lx_cap4)
     ax.set_ylim(0.0, Ly_cap4)
 
-plt.show()
+salvar_figura(fig, "ex2_fonte_mapas_temperatura_heterogenea")
+plt.close(fig)
 
 
 # ==============================================================================
@@ -818,7 +982,8 @@ axes[1].set_ylabel("Temperatura (°C)")
 axes[1].grid(True, linestyle='--', alpha=0.5)
 axes[1].legend(fontsize=8, loc='best')
 
-plt.show()
+salvar_figura(fig, "ex2_fonte_perfis_temperatura_homogenea")
+plt.close(fig)
 
 
 # ==============================================================================
@@ -849,3 +1014,6 @@ axes[1].set_xlabel("y (cm)")
 axes[1].set_ylabel("Temperatura (°C)")
 axes[1].grid(True, linestyle='--', alpha=0.5)
 axes[1].legend(fontsize=8, loc='best')
+
+salvar_figura(fig, "ex2_fonte_perfis_temperatura_homogenea")
+plt.close(fig)
