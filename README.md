@@ -27,7 +27,7 @@ python NomeDaPasta/main*.py
 | 5. Acoplamento Hidráulico-Mecânico | `AcoplamentoHidraulicoMecanico/` | `mainHM.py`, `functionsHM.py` |
 | 6. Gêmeo Digital | `GemeoDigital/` | `mainGD.py`, `functionsGD.py` |
 
-Os capítulos 4, 5 e 6 também possuem um notebook de apresentação (`Apresentacao*.ipynb`) na respectiva pasta, com os resultados já executados.
+As pastas também possuem outros arquivos extras além do código, como as apresentações, algumas imagens dos plots e algumas tabelas dos resultados
 
 ## Relatório
 
