@@ -217,7 +217,7 @@ def PlotaPlaca(Nx, Ny, Lx, Ly, T, flag_type='contour', filename=None):
     plt.yticks([0, Ly/2, Ly])
 
     if(filename is not None):
-      plt.savefig(filename)
+      plt.savefig(filename, bbox_inches='tight')
 
     plt.show()
 

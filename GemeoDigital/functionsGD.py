@@ -1507,7 +1507,7 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 
     plt.tight_layout()
     if save_dir is not None:
-        caminho = f"{save_dir}/ex645_fig1_saidas_vs_TC.png"
+        caminho = f"{save_dir}/ex645_fig1_saidas_vs_TC.pdf"
         plt.savefig(caminho, dpi=250, bbox_inches="tight")
         print(f"Figura salva: {caminho}")
     plt.show()
@@ -1541,7 +1541,7 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 
     plt.tight_layout()
     if save_dir is not None:
-        caminho = f"{save_dir}/ex645_fig2_sensibilidade_vs_TC.png"
+        caminho = f"{save_dir}/ex645_fig2_sensibilidade_vs_TC.pdf"
         plt.savefig(caminho, dpi=250, bbox_inches="tight")
         print(f"Figura salva: {caminho}")
     plt.show()
@@ -1571,7 +1571,7 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 
     plt.tight_layout()
     if save_dir is not None:
-        caminho = f"{save_dir}/ex645_fig3_saidas_vs_H.png"
+        caminho = f"{save_dir}/ex645_fig3_saidas_vs_H.pdf"
         plt.savefig(caminho, dpi=250, bbox_inches="tight")
         print(f"Figura salva: {caminho}")
     plt.show()
@@ -1605,7 +1605,7 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 
     plt.tight_layout()
     if save_dir is not None:
-        caminho = f"{save_dir}/ex645_fig4_sensibilidade_vs_H_fd.png"
+        caminho = f"{save_dir}/ex645_fig4_sensibilidade_vs_H_fd.pdf"
         plt.savefig(caminho, dpi=250, bbox_inches="tight")
         print(f"Figura salva: {caminho}")
     plt.show()
@@ -1639,7 +1639,7 @@ def PlotaExercicio645_Sensibilidade(resultados, save_dir=None):
 
     plt.tight_layout()
     if save_dir is not None:
-        caminho = f"{save_dir}/ex645_fig5_comparacao_metodo_direto.png"
+        caminho = f"{save_dir}/ex645_fig5_comparacao_metodo_direto.pdf"
         plt.savefig(caminho, dpi=250, bbox_inches="tight")
         print(f"Figura salva: {caminho}")
     plt.show()
@@ -1738,9 +1738,8 @@ def plotar_raiz_energia(GD_params, H_otimo, E_alvo=7.5):
     plt.title("Localização da raiz por Newton-Raphson")
     plt.grid(True)
     plt.legend()
+    plt.savefig("grafico_raiz_newton.pdf", bbox_inches="tight")
     plt.show()
-    plt.legend()
-    plt.savefig("grafico_raiz_newton.png")
 # =======================================================================================
 # CONCLUSÃO
 # =======================================================================================
